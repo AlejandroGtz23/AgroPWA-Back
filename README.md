@@ -2,8 +2,11 @@
 Proyecto especialmente dirigido para personas que trabajan directamente en el campo o cultivos.
 
 API REST de **Agro**, la PWA para el registro y seguimiento de cultivos.
-HU-04 · Configuración del entorno backend · Sprint 1
+HU-04 · Configuración del entorno backend · HU-07 · Configuración del despliegue · Sprint 1
 Equipo: Victor Manuel Jose Jose · Jesus Alejandro Gutierrez Montufar (10 IDGS-G3, UTTT)
+
+**API en producción (Azure):** `https://agropwa-api-cfcfcdbhdddqh7a7.centralus-01.azurewebsites.net`
+· Salud: [`/api/salud`](https://agropwa-api-cfcfcdbhdddqh7a7.centralus-01.azurewebsites.net/api/salud)
 
 ## Tecnologías
 
@@ -68,7 +71,10 @@ Agro/
    | `DB_NAME` | `agro_db` | Base de datos |
    | `DB_USER` | `postgres` | Usuario |
    | `DB_PASSWORD` | — | Contraseña (solo en `.env`, nunca en Git) |
+   | `DB_SSLMODE` | `Require` | Solo para Azure (exige SSL). En local no se pone (se usa `Prefer`) |
    | `FRONTEND_URL` | `http://localhost:5173` | Orígenes permitidos por CORS, separados por coma |
+
+   > En el `.env` solo debe estar activa **una** configuración (local o Azure); la otra, comentada con `#`.
 
 3. Ejecuta la API:
    - **Visual Studio:** abre `Agro/Agro.slnx` y presiona **F5** (se abre `/scalar` para probar la API).
@@ -105,6 +111,97 @@ Reglas de negocio:
 - **Datos sensibles en `.env`:** la configuración se lee de variables de entorno. `.env` está en `.gitignore`. Si falta una variable, la API no arranca y dice cuál falta.
 - **Respuestas en JSON:** los errores (400, 404, 500, 503) usan ProblemDetails (`application/problem+json`).
 - **CORS:** solo se aceptan peticiones de los orígenes en `FRONTEND_URL`.
+
+## Despliegue en Azure (HU-07)
+
+### Arquitectura
+
+```
+                       GitHub · AlejandroGtz23/AgroPWA-Back
+   Pull Request ─► ✅ Compilar y probar        merge a main ─► ✅ Compilar y probar ─► 🚀 Desplegar
+                                                                       │
+Azure · grupo de recursos rg-agropwa-dev                               ▼
+┌──────────────────────────┐  HTTPS  ┌────────────────────────────────┐   SSL   ┌───────────────────────────┐
+│ agropwa-front            │ ──────► │ agropwa-api                    │ ──────► │ agropwa-db-2              │
+│ Static Web App (React)   │         │ App Service · .NET 10 · Linux  │         │ PostgreSQL 16 Flexible    │
+│                          │         │ plan F1 (gratis) · Central US  │         │ B1ms · 32 GB · Central US │
+└──────────────────────────┘         └────────────────────────────────┘         └───────────────────────────┘
+```
+
+### Recursos
+
+| Recurso | Servicio | Región | Plan |
+|---|---|---|---|
+| `agropwa-api` | Azure App Service (Linux, .NET 10 LTS) | Central US | F1 Gratis |
+| `plan-agropwa` | Plan de App Service | Central US | F1 Gratis |
+| `agropwa-db-2` | Azure Database for PostgreSQL Flexible Server 16 | Central US | Burstable B1ms, 32 GB |
+| `agropwa-front` | Azure Static Web Apps (frontend, HU-05) | Global | — |
+
+La API y la base de datos están en la **misma región** para reducir la latencia y evitar costos de
+transferencia entre regiones.
+
+### Base de datos en Azure
+
+- Base `agro_db` creada con los scripts de la HU-03 (`01_esquema.sql`, `02_datos_semilla.sql`);
+  `03_pruebas_criterios.sql` pasó **20 de 20** pruebas en Azure.
+- Conexión obligatoriamente cifrada (`DB_SSLMODE=Require`).
+- Firewall: solo IP autorizadas y servicios de Azure.
+- **Mínimo privilegio:** la API usa el usuario `agro_app` (script `04_usuario_aplicacion.sql`), que solo
+  lee y escribe datos y lee los catálogos. No puede crear ni borrar tablas. El administrador
+  (`agro_admin`) solo se usa para mantenimiento.
+
+### Configuración de la API en Azure
+
+En Azure no hay archivo `.env`: la configuración está en **agropwa-api → Configuración → Variables de entorno**.
+
+| Variable | Valor |
+|---|---|
+| `DB_HOST` | `agropwa-db-2.postgres.database.azure.com` |
+| `DB_PORT` | `5432` |
+| `DB_NAME` | `agro_db` |
+| `DB_USER` | `agro_app` |
+| `DB_PASSWORD` | (contraseña de `agro_app`, solo en Azure) |
+| `DB_SSLMODE` | `Require` |
+| `FRONTEND_URL` | URL de la Static Web App (orígenes separados por coma) |
+
+### Integración y despliegue continuo (GitHub Actions)
+
+Workflow: [`.github/workflows/despliegue-api.yml`](.github/workflows/despliegue-api.yml)
+
+| Evento | Qué hace |
+|---|---|
+| Pull Request hacia `Sprint1`, `develop`, `release` o `main` | Restaura, compila en Release y ejecuta las pruebas. **No despliega**. El PR muestra ✅ o ❌ |
+| Push / merge a `main` | Compila, prueba, publica y **despliega** en `agropwa-api` |
+| Manual | GitHub → Actions → *Run workflow* |
+
+Secreto del repositorio (**Settings → Secrets and variables → Actions**):
+
+| Secreto | Contenido |
+|---|---|
+| `AZURE_WEBAPP_PUBLISH_PROFILE` | Perfil de publicación de `agropwa-api` (requiere la autenticación básica de SCM habilitada) |
+
+### Flujo de ramas
+
+```
+Sprint1_Victor ─┐
+                ├─► Sprint1 ─► develop ─► release ─► main ─► 🚀 Azure
+Sprint1_Alejandro┘
+```
+
+Todo cambio llega a `main` por Pull Request; cada PR ejecuta la compilación y las pruebas automáticamente.
+
+### Verificación del despliegue
+
+| Prueba | Resultado |
+|---|---|
+| `GET /api/salud` en Azure | 200 · `{"estado":"OK","baseDatos":"conectada"}` |
+| Ruta inexistente | 404 en JSON (ProblemDetails) |
+| Petición CORS desde un origen no permitido | Bloqueada |
+| Documentación `/scalar` | Solo en desarrollo (404 en producción) |
+
+> **Plan gratuito F1:** la app se suspende tras unos 20 minutos sin uso; la primera petición después
+> puede tardar de 10 a 30 segundos. Para no consumir crédito, el servidor PostgreSQL puede detenerse
+> desde el portal cuando no se use.
 
 ## Regenerar las entidades si cambia la base de datos
 
