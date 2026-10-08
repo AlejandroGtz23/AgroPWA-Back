@@ -17,8 +17,26 @@ public static class ConfiguracionBaseDatos
             Database = VariablesEntorno.Obtener("DB_NAME"),
             Username = VariablesEntorno.Obtener("DB_USER"),
             Password = VariablesEntorno.Obtener("DB_PASSWORD"),
-            Timeout = 5   // si la base no responde en 5 segundos, falla rápido
+            SslMode = ModoSsl(),
+            Timeout = 15   // si la base no responde en 5 segundos, falla rápido
         };
-        return cadena.ConnectionString;
+        return cadena.ConnectionString; 
+    }
+
+    /// <summary>
+    /// DB_SSLMODE: Disable, Prefer, Require, VerifyCA o VerifyFull.
+    /// Azure exige "Require". Si no se indica, se usa "Prefer" (sirve para el contenedor local).
+    /// </summary>
+    /// 
+    private static SslMode ModoSsl()
+    {
+        var valor = Environment.GetEnvironmentVariable("DB_SSLMODE");
+        if (string.IsNullOrWhiteSpace(valor))
+            return SslMode.Prefer;
+
+        return Enum.TryParse<SslMode>(valor, ignoreCase: true, out var modo)
+            ? modo
+            : throw new InvalidOperationException(
+                $"DB_SSLMODE tiene un valor no válido: '{valor}'. Usa Disable, Prefer, Require, VerifyCA o VerifyFull.");
     }
 }
