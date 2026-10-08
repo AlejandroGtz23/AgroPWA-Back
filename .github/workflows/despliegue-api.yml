@@ -1,0 +1,87 @@
+# =====================================================================
+#  Agro · HU-07 · Integración y despliegue continuo de la API
+#
+#  - En cada Pull Request: compila y ejecuta las pruebas (no despliega).
+#  - En cada push/merge a main: compila, prueba, publica y DESPLIEGA
+#    en Azure App Service (agropwa-api, Central US).
+#  - También se puede lanzar a mano desde GitHub → Actions → Run workflow.
+#
+#  Secreto requerido (GitHub → Settings → Secrets and variables → Actions):
+#    AZURE_WEBAPP_PUBLISH_PROFILE = perfil de publicación del App Service
+#  Las credenciales de la base de datos NO van aquí: están en la
+#  configuración del App Service (variables de entorno).
+# =====================================================================
+
+name: API · Compilar, probar y desplegar
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main, release, develop, Sprint1 ]
+  workflow_dispatch:
+
+env:
+  AZURE_WEBAPP_NAME: agropwa-api
+  DOTNET_VERSION: '10.0.x'
+  SOLUCION: Agro/Agro.slnx
+  PROYECTO_API: Agro/src/Agro.Api/Agro.Api.csproj
+
+permissions:
+  contents: read
+
+jobs:
+  compilar-y-probar:
+    name: Compilar y probar
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restaurar paquetes
+        run: dotnet restore ${{ env.SOLUCION }}
+
+      - name: Compilar (Release)
+        run: dotnet build ${{ env.SOLUCION }} --configuration Release --no-restore
+
+      - name: Ejecutar pruebas unitarias
+        run: dotnet test ${{ env.SOLUCION }} --configuration Release --no-build --verbosity normal
+
+      - name: Publicar la API
+        run: dotnet publish ${{ env.PROYECTO_API }} --configuration Release --no-build --output ./publicacion
+
+      - name: Guardar el paquete publicado
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-publicada
+          path: ./publicacion
+          retention-days: 7
+
+  desplegar:
+    name: Desplegar en Azure App Service
+    needs: compilar-y-probar
+    # Solo despliega desde main (push/merge o ejecución manual), nunca desde un PR
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: produccion
+      url: ${{ steps.despliegue.outputs.webapp-url }}
+    steps:
+      - name: Descargar el paquete publicado
+        uses: actions/download-artifact@v4
+        with:
+          name: api-publicada
+          path: ./publicacion
+
+      - name: Desplegar en Azure
+        id: despliegue
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: ./publicacion
