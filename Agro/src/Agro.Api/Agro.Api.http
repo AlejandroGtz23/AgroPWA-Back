@@ -1,0 +1,11 @@
+@Agro.Api_HostAddress = http://localhost:5222
+
+### Servicio de salud (HU-04): 200 y estado "OK" si la base de datos responde
+GET {{Agro.Api_HostAddress}}/api/salud
+Accept: application/json
+
+### Ruta inexistente: debe responder 404 en JSON
+GET {{Agro.Api_HostAddress}}/api/no-existe
+Accept: application/json
+
+###
