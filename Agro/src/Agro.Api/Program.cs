@@ -72,10 +72,10 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AgroDbContext>();
     var (conectado, mensaje) = await VerificacionConexion.ProbarAsync(db);
-    if (conectado)
-        app.Logger.LogInformation("{Mensaje}", mensaje);
-    else
+    if (!conectado)
         app.Logger.LogError("{Mensaje}. La API sigue activa y /api/salud responderá 503.", mensaje);
+    else if (app.Logger.IsEnabled(LogLevel.Information))
+        app.Logger.LogInformation("{Mensaje}", mensaje);
 }
 
 await app.RunAsync();
