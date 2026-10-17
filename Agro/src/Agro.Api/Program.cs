@@ -19,7 +19,7 @@ try
 }
 catch (InvalidOperationException ex)
 {
-    Console.Error.WriteLine($"Error de configuración: {ex.Message}");
+    await Console.Error.WriteLineAsync($"Error de configuración: {ex.Message}");
     return 1;
 }
 
