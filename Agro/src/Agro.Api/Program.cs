@@ -78,5 +78,5 @@ using (var scope = app.Services.CreateScope())
         app.Logger.LogError("{Mensaje}. La API sigue activa y /api/salud responderá 503.", mensaje);
 }
 
-app.Run();
+await app.RunAsync();
 return 0;
