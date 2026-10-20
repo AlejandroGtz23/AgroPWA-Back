@@ -9,7 +9,7 @@ Proyecto especialmente dirigido para personas que trabajan directamente en el ca
 
 API REST de **Agro**, la PWA para el registro y seguimiento de cultivos.
 HU-04 · Configuración del entorno backend · HU-07 · Configuración del despliegue · Sprint 1
-HU-29 · Análisis estático de calidad de código · Sprint 3
+HU-29 · Análisis estático de calidad de código · HU-31 · Documentación de la API con Swagger · Sprint 3
 Equipo: Victor Manuel Jose Jose · Jesus Alejandro Gutierrez Montufar (10 IDGS-G3, UTTT)
 
 **API en producción (Azure):** `https://agropwa-api-cfcfcdbhdddqh7a7.centralus-01.azurewebsites.net`
@@ -24,7 +24,7 @@ Equipo: Victor Manuel Jose Jose · Jesus Alejandro Gutierrez Montufar (10 IDGS-G
 | PostgreSQL (base `agro_db`, HU-03) | 13 o superior (contenedor Docker) |
 | FluentValidation | 12.x |
 | BCrypt.Net-Next · JWT (Microsoft.IdentityModel) | para HU-09 y HU-10 |
-| DotNetEnv (`.env`) · Scalar (documentación de la API) | 3.x · 2.x |
+| DotNetEnv (`.env`) · Swagger UI (documentación de la API) | 3.x · 10.x |
 | xUnit (pruebas) | 2.x |
 
 ## Arquitectura: Clean Architecture + CQRS ligero
@@ -84,7 +84,7 @@ Agro/
    > En el `.env` solo debe estar activa **una** configuración (local o Azure); la otra, comentada con `#`.
 
 3. Ejecuta la API:
-   - **Visual Studio:** abre `Agro/Agro.slnx` y presiona **F5** (se abre `/scalar` para probar la API).
+   - **Visual Studio:** abre `Agro/Agro.slnx` y presiona **F5** (se abre `/swagger` para probar la API).
    - **Terminal**, dentro de `Agro`:
      ```bash
      dotnet run --project src/Agro.Api
@@ -151,6 +151,19 @@ El scanner trabaja en tres fases: `begin` (se engancha al compilador) → `dotne
 | CA1873 | `Program.cs` | `IsEnabled(LogLevel.Information)` antes del log |
 
 Detalle de las correcciones: PR [#24](https://github.com/AlejandroGtz23/AgroPWA-Back/pull/24).
+
+## Documentación de la API · Swagger (HU-31)
+
+La documentación tiene dos partes:
+
+| Ruta | Qué es | Quién la genera |
+|---|---|---|
+| `/openapi/v1.json` | Documento OpenAPI: describe todos los endpoints, parámetros y respuestas | .NET 10 (`AddOpenApi()` + `MapOpenApi()`) |
+| `/swagger` | **Swagger UI**: página que lee ese documento y permite probar cada endpoint con *Try it out* | `Swashbuckle.AspNetCore.SwaggerUI` (`UseSwaggerUI()`) |
+
+- Solo se publica en **desarrollo** (`ASPNETCORE_ENVIRONMENT=Development`); en Azure (producción) ambas rutas responden 404.
+- Para probarla: ejecuta la API, abre `http://localhost:5222/swagger`, despliega `GET /api/salud` → *Try it out* → *Execute*.
+- El botón *Authorize* para enviar el token JWT se agregará junto con la HU-10 (inicio de sesión).
 
 ## Servicio de salud · `GET /api/salud`
 
@@ -262,7 +275,7 @@ Todo cambio llega a `main` por Pull Request; cada PR ejecuta la compilación y l
 | `GET /api/salud` en Azure | 200 · `{"estado":"OK","baseDatos":"conectada"}` |
 | Ruta inexistente | 404 en JSON (ProblemDetails) |
 | Petición CORS desde un origen no permitido | Bloqueada |
-| Documentación `/scalar` | Solo en desarrollo (404 en producción) |
+| Documentación `/swagger` y `/openapi/v1.json` | Solo en desarrollo (404 en producción) |
 
 > **Plan gratuito F1:** la app se suspende tras unos 20 minutos sin uso; la primera petición después
 > puede tardar de 10 a 30 segundos. Para no consumir crédito, el servidor PostgreSQL puede detenerse
