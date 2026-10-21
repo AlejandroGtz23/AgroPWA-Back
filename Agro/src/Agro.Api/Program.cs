@@ -3,7 +3,7 @@ using Agro.Application;
 using Agro.Infrastructure;
 using Agro.Infrastructure.Configuration;
 using Agro.Infrastructure.Persistence;
-using Scalar.AspNetCore;
+
 
 // Carga el archivo .env (busca hacia arriba desde la carpeta de ejecución).
 // NoClobber: si la variable ya existe en el sistema (por ejemplo en Azure), se respeta.
@@ -44,7 +44,13 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ManejadorExcepciones>();
 
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(opciones => opciones.AddDocumentTransformer((documento, contexto, ct) =>
+{
+    documento.Info.Title = "Agro API";
+    documento.Info.Version = "v1";
+    documento.Info.Description = "API de Agro, la PWA para el registro y seguimiento de cultivos.";
+    return Task.CompletedTask;
+}));
 
 var app = builder.Build();
 
@@ -58,7 +64,11 @@ app.UseStatusCodePages();    // 404, 405… sin cuerpo -> JSON
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();                 // /openapi/v1.json
-    app.MapScalarApiReference();      // /scalar: probar la API desde el navegador
+    app.UseSwaggerUI(opciones => // /swagger: probar la API desde el navegador
+    {
+        opciones.SwaggerEndpoint("/openapi/v1.json", "Agro API v1");
+        opciones.DocumentTitle = "Agro API · Swagger";
+    });      
 }
 
 app.UseHttpsRedirection();
