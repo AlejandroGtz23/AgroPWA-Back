@@ -12,10 +12,12 @@ DotNetEnv.Env.NoClobber().TraversePath().Load();
 // Configuración obligatoria: si falta una variable del .env, se avisa claro y no arranca.
 string cadenaConexion;
 string[] origenesFrontend;
+ConfiguracionJwt configuracionJwt;
 try
 {
     cadenaConexion = ConfiguracionBaseDatos.CadenaConexion();
     origenesFrontend = VariablesEntorno.OrigenesFrontend();
+    configuracionJwt = ConfiguracionJwt.DesdeVariables();
 }
 catch (InvalidOperationException ex)
 {
@@ -30,7 +32,7 @@ var builder = WebApplication.CreateBuilder(args);
 // ---------------------------------------------------------------------
 
 builder.Services.AddApplication();                          // commands, queries y validadores
-builder.Services.AddInfraestructure(cadenaConexion);        // PostgreSQL (agro_db)
+builder.Services.AddInfraestructure(cadenaConexion, configuracionJwt);        // PostgreSQL (agro_db)
 
 // CORS: solo se aceptan peticiones del dominio del frontend
 const string PoliticaFrontend = "Frontend";
@@ -43,7 +45,9 @@ builder.Services.AddCors(opciones => opciones.AddPolicy(PoliticaFrontend, politi
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ManejadorExcepciones>();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(opciones =>
+    opciones.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true);
+
 builder.Services.AddOpenApi(opciones => opciones.AddDocumentTransformer((documento, contexto, ct) =>
 {
     documento.Info.Title = "Agro API";

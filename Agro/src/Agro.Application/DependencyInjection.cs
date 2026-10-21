@@ -1,3 +1,4 @@
+using Agro.Application.Auth.Commands.RegistrarUsuario;
 using Agro.Application.Salud.Queries.ComprobarSalud;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,13 +10,18 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
+        ValidatorOptions.Global.PropertyNameResolver = (_, miembro, _) =>
+            miembro is null ? null : 
+            System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(miembro.Name);
+
         // Validadores de FluentValidation de todo el proyecto (se irán agregando por historia)
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
 
         // Queries
         services.AddScoped<ComprobarSaludHandler>();
 
-        // Commands (HU-09 en adelante): services.AddScoped<RegistrarUsuarioHandler>(); …
+        // Commands
+        services.AddScoped<RegistrarUsuarioHandler>();
 
         return services;
     }

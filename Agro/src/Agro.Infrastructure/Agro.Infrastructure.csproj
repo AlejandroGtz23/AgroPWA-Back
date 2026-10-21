@@ -16,9 +16,4 @@
     <ProjectReference Include="..\Agro.Application\Agro.Application.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Security\" />
-    <Folder Include="Persistence\" />
-  </ItemGroup>
-
 </Project>
