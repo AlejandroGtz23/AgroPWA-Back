@@ -1,4 +1,5 @@
 using System.Data.Common;
+using Agro.Application.Common.Exceptions;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +18,9 @@ public class ManejadorExcepciones(IProblemDetailsService problemDetails, ILogger
     {
         var (estado, titulo) = exception switch
         {
+            ConflictoException => (StatusCodes.Status409Conflict, exception.Message),
+            NoAutorizadoException => (StatusCodes.Status401Unauthorized, exception.Message),
+            DemasiadosIntentosException => (StatusCodes.Status429TooManyRequests, exception.Message),
             ValidationException => (StatusCodes.Status400BadRequest, "Los datos enviados no son válidos."),
             BadHttpRequestException => (StatusCodes.Status400BadRequest, "La petición no es válida."),
             DbException or TimeoutException => (StatusCodes.Status503ServiceUnavailable,

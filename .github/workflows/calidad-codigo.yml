@@ -60,6 +60,7 @@ jobs:
           /o:"${{ env.SONAR_ORGANIZACION }}"
           /d:sonar.host.url="https://sonarcloud.io"
           /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml"
+          /d:sonar.coverage.exclusions="**/Agro.Api/**,**/Agro.Infrastructure/Persistence/**,**/Agro.Infrastructure/Configuration/**,**/Agro.Infrastructure/DependencyInjection.cs,**/Agro.Application/DependencyInjection.cs,**/Agro.Domain/Entities/**"
 
       - name: Compilar
         run: dotnet build ${{ env.SOLUCION }} --configuration Release

@@ -19,6 +19,7 @@ public interface IAgroDbContext
     DbSet<Dispositivo> Dispositivo { get; }
     DbSet<Sesion> Sesion { get; }
     DbSet<CodigoVerificacion> CodigoVerificacion { get; }
+    DbSet<IntentoAcceso> IntentoAcceso { get; }
 
     // Cultivos
     DbSet<Parcela> Parcela { get; }

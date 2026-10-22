@@ -71,6 +71,7 @@ public class ComprobarSaludHandlerTests
         public DbSet<Dispositivo> Dispositivo => throw new NotSupportedException();
         public DbSet<Sesion> Sesion => throw new NotSupportedException();
         public DbSet<CodigoVerificacion> CodigoVerificacion => throw new NotSupportedException();
+        public DbSet<IntentoAcceso> IntentoAcceso => throw new NotSupportedException();
         public DbSet<Parcela> Parcela => throw new NotSupportedException();
         public DbSet<Cultivo> Cultivo => throw new NotSupportedException();
         public DbSet<Avance> Avance => throw new NotSupportedException();
