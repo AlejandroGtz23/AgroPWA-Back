@@ -1,4 +1,6 @@
+using Agro.Application.Auth.Commands.IniciarSesion;
 using Agro.Application.Auth.Commands.RegistrarUsuario;
+using Agro.Application.Auth.Common;
 using Agro.Application.Salud.Queries.ComprobarSalud;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,8 +22,12 @@ public static class DependencyInjection
         // Queries
         services.AddScoped<ComprobarSaludHandler>();
 
+        // Comunes de autenticación
+        services.AddScoped<CreadorSesion>();
+
         // Commands
         services.AddScoped<RegistrarUsuarioHandler>();
+        services.AddScoped<IniciarSesionHandler>();
 
         return services;
     }

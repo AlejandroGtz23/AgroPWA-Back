@@ -1,9 +1,8 @@
-﻿using Agro.Application.Common.Exceptions;
+﻿using Agro.Application.Auth.Common;
 using Agro.Application.Common.Interfaces;
 using Agro.Application.Common.Models;
-using Agro.Domain.Entities;
 using FluentValidation;
-using Microsoft.EntityFrameworkCore;
+
 
 namespace Agro.Application.Auth.Commands.RegistrarUsuario;
 
@@ -11,11 +10,13 @@ namespace Agro.Application.Auth.Commands.RegistrarUsuario;
 public sealed class RegistrarUsuarioHandler(
     IAuthProcedimientos procedimientos,
     IHashContrasena hashContrasena,
+    CreadorSesion creadorSesion,
     IValidator<RegistrarUsuarioCommand> validador)
 {
     private const string RolPorDefecto = "productor";
 
-    public async Task<UsuarioRegistradoDto> EjecutarAsync(RegistrarUsuarioCommand comando, CancellationToken ct = default)
+    public async Task<SesionDto> EjecutarAsync(RegistrarUsuarioCommand comando,
+        string? ip, string? agenteUsuario, CancellationToken ct = default)
     {
         await validador.ValidateAndThrowAsync(comando, ct);                    // 400 si algo no es válido
 
@@ -30,7 +31,8 @@ public sealed class RegistrarUsuarioHandler(
 
         var idUsuario = await procedimientos.RegistrarUsuarioAsync(datos, ct); // 409 si el correo existe
 
-        return new UsuarioRegistradoDto(idUsuario, datos.Nombre, datos.Correo, RolPorDefecto);
+        var usuario = new UsuarioSesionDto(idUsuario, datos.Nombre, datos.Correo, RolPorDefecto);
+        return await creadorSesion.CrearAsync(usuario, recordarme: false, ip, agenteUsuario, ct);
     }
 
 }
