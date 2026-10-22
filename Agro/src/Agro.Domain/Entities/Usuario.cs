@@ -17,7 +17,7 @@ public partial class Usuario
 
     public string Correo { get; set; } = null!;
 
-    public string Telefono { get; set; } = null!;
+    public string? Telefono { get; set; }
 
     public DateOnly FechaNacimiento { get; set; }
 
@@ -41,6 +41,11 @@ public partial class Usuario
 
     public DateTime? UltimoAcceso { get; set; }
 
+    /// <summary>
+    /// Fecha de aceptación de los términos y el aviso de privacidad (HU-09). NULL en usuarios anteriores a la HU-09
+    /// </summary>
+    public DateTime? FechaAceptacionTerminos { get; set; }
+
     public virtual ICollection<CodigoVerificacion> CodigoVerificacion { get; set; } = new List<CodigoVerificacion>();
 
     public virtual ICollection<ColaSincronizacion> ColaSincronizacion { get; set; } = new List<ColaSincronizacion>();
@@ -52,6 +57,8 @@ public partial class Usuario
     public virtual ICollection<Fotografia> Fotografia { get; set; } = new List<Fotografia>();
 
     public virtual Rol IdRolNavigation { get; set; } = null!;
+
+    public virtual ICollection<IntentoAcceso> IntentoAcceso { get; set; } = new List<IntentoAcceso>();
 
     public virtual ICollection<Parcela> Parcela { get; set; } = new List<Parcela>();
 
