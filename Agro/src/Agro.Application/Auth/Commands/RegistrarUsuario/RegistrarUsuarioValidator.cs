@@ -10,11 +10,13 @@ public sealed class RegistrarUsuarioValidator : AbstractValidator<RegistrarUsuar
     public RegistrarUsuarioValidator()
     {
         RuleFor(x => x.Nombre)
+            .Cascade(CascadeMode.Stop)   // si falta el dato, no evalúa las demás reglas (evita null.Trim())
             .NotEmpty().WithMessage("El nombre es obligatorio.")
             .Must(n => n.Trim().Length >= 2).WithMessage("El nombre debe tener al menos 2 letras.")
             .MaximumLength(60);
 
         RuleFor(x => x.ApellidoPaterno)
+            .Cascade(CascadeMode.Stop)   // si falta el dato, no evalúa las demás reglas (evita null.Trim())
             .NotEmpty().WithMessage("El apellido paterno es obligatorio.")
             .Must(a => a.Trim().Length >= 2).WithMessage("El apellido paterno debe tener al menos 2 letras.")
             .MaximumLength(60);
