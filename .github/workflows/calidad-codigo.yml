@@ -1,0 +1,77 @@
+# =====================================================================
+#  Agro · HU-29 · Análisis estático de calidad de código (SonarQube Cloud)
+#
+#  - En cada push a main/develop/Sprint* y en cada Pull Request:
+#    compila, ejecuta pruebas con cobertura y envía el análisis
+#    a SonarQube Cloud. El resultado (Quality Gate) aparece en el PR.
+#
+#  Secreto requerido (GitHub → Settings → Secrets and variables → Actions):
+#    SONAR_TOKEN = token generado en SonarQube Cloud
+# =====================================================================
+
+name: Calidad · Análisis SonarQube Cloud
+on:
+  push:
+    branches: [ main, develop, 'Sprint*' ]
+  pull_request:
+    branches: [ main, release, develop, 'Sprint*' ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  SOLUCION: Agro/Agro.slnx
+  SONAR_ORGANIZACION: alejandrogtz23
+  SONAR_PROYECTO: AlejandroGtz23_AgroPWA-Back
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  analizar:
+    name: Compilar, probar y analizar
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Instalar Java 21 (requerido por el scanner)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Instalar .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Instalar SonarScanner for .NET
+        run: dotnet tool install dotnet-sonarscanner --tool-path ${{ runner.temp }}/scanner
+
+      - name: Iniciar análisis (begin)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          ${{ runner.temp }}/scanner/dotnet-sonarscanner begin
+          /k:"${{ env.SONAR_PROYECTO }}"
+          /o:"${{ env.SONAR_ORGANIZACION }}"
+          /d:sonar.host.url="https://sonarcloud.io"
+          /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml"
+          /d:sonar.coverage.exclusions="**/Agro.Api/**,**/Agro.Infrastructure/Persistence/**,**/Agro.Infrastructure/Configuration/**,**/Agro.Infrastructure/DependencyInjection.cs,**/Agro.Application/DependencyInjection.cs,**/Agro.Domain/Entities/**"
+
+      - name: Compilar
+        run: dotnet build ${{ env.SOLUCION }} --configuration Release
+
+      - name: Ejecutar pruebas con cobertura
+        run: >
+          dotnet test ${{ env.SOLUCION }} --configuration Release --no-build
+          --collect:"XPlat Code Coverage"
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+      - name: Finalizar y enviar análisis (end)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: ${{ runner.temp }}/scanner/dotnet-sonarscanner end

@@ -24,6 +24,8 @@ public partial class AgroDbContext : DbContext
 
     public virtual DbSet<Fotografia> Fotografia { get; set; }
 
+    public virtual DbSet<IntentoAcceso> IntentoAcceso { get; set; }
+
     public virtual DbSet<MensajeContacto> MensajeContacto { get; set; }
 
     public virtual DbSet<Parcela> Parcela { get; set; }
@@ -347,6 +349,38 @@ public partial class AgroDbContext : DbContext
                 .HasConstraintName("fk_fotografia_cultivo");
         });
 
+        modelBuilder.Entity<IntentoAcceso>(entity =>
+        {
+            entity.HasKey(e => e.IdIntento).HasName("pk_intento_acceso");
+
+            entity.ToTable("intento_acceso");
+
+            entity.HasIndex(e => e.IdUsuario, "ix_intento_usuario");
+
+            entity.Property(e => e.IdIntento)
+                .UseIdentityAlwaysColumn()
+                .HasColumnName("id_intento");
+            entity.Property(e => e.AgenteUsuario)
+                .HasMaxLength(300)
+                .HasColumnName("agente_usuario");
+            entity.Property(e => e.Correo)
+                .HasMaxLength(150)
+                .HasColumnName("correo");
+            entity.Property(e => e.Exitoso).HasColumnName("exitoso");
+            entity.Property(e => e.FechaIntento)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP")
+                .HasColumnName("fecha_intento");
+            entity.Property(e => e.IdUsuario).HasColumnName("id_usuario");
+            entity.Property(e => e.Ip)
+                .HasMaxLength(45)
+                .HasColumnName("ip");
+
+            entity.HasOne(d => d.IdUsuarioNavigation).WithMany(p => p.IntentoAcceso)
+                .HasForeignKey(d => d.IdUsuario)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("fk_intento_usuario");
+        });
+
         modelBuilder.Entity<MensajeContacto>(entity =>
         {
             entity.HasKey(e => e.IdMensaje).HasName("pk_mensaje_contacto");
@@ -563,6 +597,9 @@ public partial class AgroDbContext : DbContext
             entity.Property(e => e.DosPasosActivo)
                 .HasDefaultValue(true)
                 .HasColumnName("dos_pasos_activo");
+            entity.Property(e => e.FechaAceptacionTerminos)
+                .HasComment("Fecha de aceptación de los términos y el aviso de privacidad (HU-09). NULL en usuarios anteriores a la HU-09")
+                .HasColumnName("fecha_aceptacion_terminos");
             entity.Property(e => e.FechaActualizacion)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP")
                 .HasColumnName("fecha_actualizacion");
