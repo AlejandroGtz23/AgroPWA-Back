@@ -1,8 +1,10 @@
+using Agro.Api.Configuration;
 using Agro.Api.Middleware;
 using Agro.Application;
 using Agro.Infrastructure;
 using Agro.Infrastructure.Configuration;
 using Agro.Infrastructure.Persistence;
+using System.Threading.RateLimiting;
 
 
 // Carga el archivo .env (busca hacia arriba desde la carpeta de ejecución).
@@ -48,13 +50,17 @@ builder.Services.AddExceptionHandler<ManejadorExcepciones>();
 builder.Services.AddControllers(opciones =>
     opciones.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true);
 
-builder.Services.AddOpenApi(opciones => opciones.AddDocumentTransformer((documento, contexto, ct) =>
+builder.Services.AddDocumentacionApi();                      // OpenAPI + botón Authorize (HU-31)
+builder.Services.AddAutenticacionJwt(configuracionJwt);      // JWT + validación de la sesión (HU-10)
+
+// Límite de peticiones al login: máximo 10 por minuto por IP (protección contra fuerza bruta)
+builder.Services.AddRateLimiter(opciones =>
 {
-    documento.Info.Title = "Agro API";
-    documento.Info.Version = "v1";
-    documento.Info.Description = "API de Agro, la PWA para el registro y seguimiento de cultivos.";
-    return Task.CompletedTask;
-}));
+    opciones.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    opciones.AddPolicy("login", contexto => RateLimitPartition.GetFixedWindowLimiter(
+        contexto.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
 
 var app = builder.Build();
 
@@ -77,7 +83,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors(PoliticaFrontend);
-app.UseAuthorization();
+app.UseAuthentication();   // 1. ¿quién eres? (lee y valida el token)
+app.UseAuthorization();    // 2. ¿puedes entrar? ([Authorize])
+app.UseRateLimiter();
 app.MapControllers();
 
 // Criterios 2 y 4: probar la conexión al arrancar y registrarla en la consola,

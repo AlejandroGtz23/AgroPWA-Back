@@ -1,4 +1,5 @@
-﻿using Agro.Application.Common.Exceptions;
+﻿using Agro.Application.Auth.Common;
+using Agro.Application.Common.Exceptions;
 using Agro.Application.Common.Interfaces;
 using Agro.Application.Common.Models;
 using Microsoft.EntityFrameworkCore;
@@ -69,6 +70,29 @@ public sealed class AuthProcedimientos(AgroDbContext db) : IAuthProcedimientos
             Parametro("expira", NpgsqlDbType.TimestampTz, sesion.FechaExpiracion),
             Parametro("ip", NpgsqlDbType.Varchar, sesion.Ip),
             Parametro("agente", NpgsqlDbType.Varchar, sesion.AgenteUsuario)));
+    public async Task<bool> ValidarSesionAsync(string jti, int minutosInactividad, CancellationToken ct = default) =>
+    Convert.ToBoolean(await EjecutarAsync("CALL sp_validar_sesion(@jti, @minutos, NULL)", ct,
+        Parametro("jti", NpgsqlDbType.Varchar, jti),
+        Parametro("minutos", NpgsqlDbType.Integer, minutosInactividad)));
+
+    public async Task<UsuarioSesionDto?> RenovarSesionAsync(string refreshTokenHash, string nuevoJti,
+        string nuevoRefreshTokenHash, int minutosInactividad, CancellationToken ct = default)
+    {
+        var usuarios = await ConsultarAsync(
+            "CALL sp_renovar_sesion(@refresh, @nuevo_jti, @nuevo_refresh, @minutos, 'resultado')",
+            lector => new UsuarioSesionDto(
+                lector.GetInt32(lector.GetOrdinal("id_usuario")),
+                lector.GetString(lector.GetOrdinal("nombre")),
+                lector.GetString(lector.GetOrdinal("correo")),
+                lector.GetString(lector.GetOrdinal("rol"))),
+            ct,
+            Parametro("refresh", NpgsqlDbType.Varchar, refreshTokenHash),
+            Parametro("nuevo_jti", NpgsqlDbType.Varchar, nuevoJti),
+            Parametro("nuevo_refresh", NpgsqlDbType.Varchar, nuevoRefreshTokenHash),
+            Parametro("minutos", NpgsqlDbType.Integer, minutosInactividad));
+
+        return usuarios.FirstOrDefault();   // vacío = sesión vencida, cerrada o refresh token ya usado
+    }
 
     // ---------------- Métodos comunes ----------------
     private async Task<object?> EjecutarAsync(string sql, CancellationToken ct, params NpgsqlParameter[] parametros)
@@ -122,5 +146,6 @@ public sealed class AuthProcedimientos(AgroDbContext db) : IAuthProcedimientos
     }
     private static NpgsqlParameter Parametro(string nombre, NpgsqlDbType tipo, object? valor) =>
         new(nombre, tipo) { Value = valor ?? DBNull.Value };
+
 
 }
