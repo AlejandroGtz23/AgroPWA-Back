@@ -1,3 +1,8 @@
+using Agro.Application.Auth.Commands.CerrarSesion;
+using Agro.Application.Auth.Commands.IniciarSesion;
+using Agro.Application.Auth.Commands.RegistrarUsuario;
+using Agro.Application.Auth.Commands.RenovarSesion;
+using Agro.Application.Auth.Common;
 using Agro.Application.Salud.Queries.ComprobarSalud;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,13 +14,24 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
+        ValidatorOptions.Global.PropertyNameResolver = (_, miembro, _) =>
+            miembro is null ? null : 
+            System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(miembro.Name);
+
         // Validadores de FluentValidation de todo el proyecto (se irán agregando por historia)
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
 
         // Queries
         services.AddScoped<ComprobarSaludHandler>();
 
-        // Commands (HU-09 en adelante): services.AddScoped<RegistrarUsuarioHandler>(); …
+        // Comunes de autenticación
+        services.AddScoped<CreadorSesion>();
+        services.AddScoped<ValidadorSesion>();
+        // Commands
+        services.AddScoped<RegistrarUsuarioHandler>();
+        services.AddScoped<IniciarSesionHandler>();
+        services.AddScoped<RenovarSesionHandler>();
+        services.AddScoped<CerrarSesionHandler>();
 
         return services;
     }

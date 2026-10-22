@@ -1,8 +1,15 @@
 # AgroPWA-Back
+
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=AlejandroGtz23_AgroPWA-Back&metric=alert_status)](https://sonarcloud.io/summary/overall?id=AlejandroGtz23_AgroPWA-Back)
+[![Vulnerabilidades](https://sonarcloud.io/api/project_badges/measure?project=AlejandroGtz23_AgroPWA-Back&metric=vulnerabilities)](https://sonarcloud.io/summary/overall?id=AlejandroGtz23_AgroPWA-Back)
+[![Code smells](https://sonarcloud.io/api/project_badges/measure?project=AlejandroGtz23_AgroPWA-Back&metric=code_smells)](https://sonarcloud.io/summary/overall?id=AlejandroGtz23_AgroPWA-Back)
+[![Cobertura](https://sonarcloud.io/api/project_badges/measure?project=AlejandroGtz23_AgroPWA-Back&metric=coverage)](https://sonarcloud.io/summary/overall?id=AlejandroGtz23_AgroPWA-Back)
+
 Proyecto especialmente dirigido para personas que trabajan directamente en el campo o cultivos.
 
 API REST de **Agro**, la PWA para el registro y seguimiento de cultivos.
 HU-04 · Configuración del entorno backend · HU-07 · Configuración del despliegue · Sprint 1
+HU-29 · Análisis estático de calidad de código · HU-31 · Documentación de la API con Swagger · Sprint 3
 Equipo: Victor Manuel Jose Jose · Jesus Alejandro Gutierrez Montufar (10 IDGS-G3, UTTT)
 
 **API en producción (Azure):** `https://agropwa-api-cfcfcdbhdddqh7a7.centralus-01.azurewebsites.net`
@@ -17,7 +24,7 @@ Equipo: Victor Manuel Jose Jose · Jesus Alejandro Gutierrez Montufar (10 IDGS-G
 | PostgreSQL (base `agro_db`, HU-03) | 13 o superior (contenedor Docker) |
 | FluentValidation | 12.x |
 | BCrypt.Net-Next · JWT (Microsoft.IdentityModel) | para HU-09 y HU-10 |
-| DotNetEnv (`.env`) · Scalar (documentación de la API) | 3.x · 2.x |
+| DotNetEnv (`.env`) · Swagger UI (documentación de la API) | 3.x · 10.x |
 | xUnit (pruebas) | 2.x |
 
 ## Arquitectura: Clean Architecture + CQRS ligero
@@ -77,7 +84,7 @@ Agro/
    > En el `.env` solo debe estar activa **una** configuración (local o Azure); la otra, comentada con `#`.
 
 3. Ejecuta la API:
-   - **Visual Studio:** abre `Agro/Agro.slnx` y presiona **F5** (se abre `/scalar` para probar la API).
+   - **Visual Studio:** abre `Agro/Agro.slnx` y presiona **F5** (se abre `/swagger` para probar la API).
    - **Terminal**, dentro de `Agro`:
      ```bash
      dotnet run --project src/Agro.Api
@@ -89,6 +96,74 @@ Agro/
 ```bash
 dotnet test Agro/Agro.slnx
 ```
+
+## Calidad de código · SonarQube Cloud (HU-29)
+
+Cada push y Pull Request se analiza automáticamente con **SonarQube Cloud** (análisis estático):
+bugs, vulnerabilidades, *code smells*, duplicación, complejidad y cobertura de pruebas.
+El **Quality Gate** decide si el código cumple el estándar y su resultado aparece en el PR.
+
+- Panel del proyecto: [sonarcloud.io · AgroPWA-Back](https://sonarcloud.io/summary/overall?id=AlejandroGtz23_AgroPWA-Back)
+- Workflow: [`.github/workflows/calidad-codigo.yml`](.github/workflows/calidad-codigo.yml)
+
+### Configuración
+
+| Elemento | Valor |
+|---|---|
+| Organización (SonarQube Cloud) | `alejandrogtz23` · plan Free (repositorio público) |
+| Proyecto | `AlejandroGtz23_AgroPWA-Back` |
+| Método de análisis | GitHub Actions + SonarScanner for .NET (*Automatic Analysis* desactivado: no es compatible con C#) |
+| Rama principal en Sonar | `develop` (el plan Free solo muestra el detalle completo de la rama principal) |
+| Cobertura | `coverlet.collector` en formato OpenCover (`coverage.opencover.xml`) |
+| Exclusiones | Ninguna |
+
+Secreto del repositorio (**Settings → Secrets and variables → Actions**):
+
+| Secreto | Contenido |
+|---|---|
+| `SONAR_TOKEN` | Token de análisis generado en SonarQube Cloud (nunca en el código) |
+
+### Ejecución
+
+| Evento | Qué hace |
+|---|---|
+| Push a `main`, `develop` o `Sprint*` | Compila, ejecuta las pruebas con cobertura y envía el análisis |
+| Pull Request hacia `Sprint*`, `develop`, `release` o `main` | Igual; el PR muestra el check del análisis |
+| Manual | GitHub → Actions → *Calidad · Análisis SonarQube Cloud* → *Run workflow* |
+
+El scanner trabaja en tres fases: `begin` (se engancha al compilador) → `dotnet build` y `dotnet test` → `end` (envía los resultados).
+
+### Resultados (Sprint 3)
+
+| Métrica | Análisis inicial | Análisis final |
+|---|---|---|
+| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) |
+| Code smells | 3 | 0 |
+| Bugs | 0 | 0 |
+| Deuda técnica | 10 min | 0 min |
+| Quality Gate | — | **Passed** |
+
+| Regla | Archivo | Corrección |
+|---|---|---|
+| S7637 | `despliegue-api.yml` | `azure/webapps-deploy` fijado por SHA completo (v3.0.8) |
+| S6966 | `Program.cs` | `await Console.Error.WriteLineAsync(...)` |
+| S6966 | `Program.cs` | `await app.RunAsync()` |
+| CA1873 | `Program.cs` | `IsEnabled(LogLevel.Information)` antes del log |
+
+Detalle de las correcciones: PR [#24](https://github.com/AlejandroGtz23/AgroPWA-Back/pull/24).
+
+## Documentación de la API · Swagger (HU-31)
+
+La documentación tiene dos partes:
+
+| Ruta | Qué es | Quién la genera |
+|---|---|---|
+| `/openapi/v1.json` | Documento OpenAPI: describe todos los endpoints, parámetros y respuestas | .NET 10 (`AddOpenApi()` + `MapOpenApi()`) |
+| `/swagger` | **Swagger UI**: página que lee ese documento y permite probar cada endpoint con *Try it out* | `Swashbuckle.AspNetCore.SwaggerUI` (`UseSwaggerUI()`) |
+
+- Solo se publica en **desarrollo** (`ASPNETCORE_ENVIRONMENT=Development`); en Azure (producción) ambas rutas responden 404.
+- Para probarla: ejecuta la API, abre `http://localhost:5222/swagger`, despliega `GET /api/salud` → *Try it out* → *Execute*.
+- El botón *Authorize* para enviar el token JWT se agregará junto con la HU-10 (inicio de sesión).
 
 ## Servicio de salud · `GET /api/salud`
 
@@ -170,7 +245,7 @@ Workflow: [`.github/workflows/despliegue-api.yml`](.github/workflows/despliegue-
 
 | Evento | Qué hace |
 |---|---|
-| Pull Request hacia `Sprint1`, `develop`, `release` o `main` | Restaura, compila en Release y ejecuta las pruebas. **No despliega**. El PR muestra ✅ o ❌ |
+| Pull Request hacia `Sprint*`, `develop`, `release` o `main` | Restaura, compila en Release y ejecuta las pruebas. **No despliega**. El PR muestra ✅ o ❌ |
 | Push / merge a `main` | Compila, prueba, publica y **despliega** en `agropwa-api` |
 | Manual | GitHub → Actions → *Run workflow* |
 
@@ -183,10 +258,13 @@ Secreto del repositorio (**Settings → Secrets and variables → Actions**):
 ### Flujo de ramas
 
 ```
-Sprint1_Victor ─┐
-                ├─► Sprint1 ─► develop ─► release ─► main ─► 🚀 Azure
-Sprint1_Alejandro┘
+Sprint3_Victor ─┐
+                ├─► Sprint3 ─► develop ─► release ─► main ─► 🚀 Azure
+Sprint3_Ale    ─┘
 ```
+
+Cada sprint crea sus ramas desde `develop` (`SprintN`, `SprintN_Victor`, `SprintN_Ale`).
+Todo cambio llega a `main` por Pull Request; cada PR ejecuta la compilación, las pruebas y el análisis de calidad.
 
 Todo cambio llega a `main` por Pull Request; cada PR ejecuta la compilación y las pruebas automáticamente.
 
@@ -197,7 +275,7 @@ Todo cambio llega a `main` por Pull Request; cada PR ejecuta la compilación y l
 | `GET /api/salud` en Azure | 200 · `{"estado":"OK","baseDatos":"conectada"}` |
 | Ruta inexistente | 404 en JSON (ProblemDetails) |
 | Petición CORS desde un origen no permitido | Bloqueada |
-| Documentación `/scalar` | Solo en desarrollo (404 en producción) |
+| Documentación `/swagger` y `/openapi/v1.json` | Solo en desarrollo (404 en producción) |
 
 > **Plan gratuito F1:** la app se suspende tras unos 20 minutos sin uso; la primera petición después
 > puede tardar de 10 a 30 segundos. Para no consumir crédito, el servidor PostgreSQL puede detenerse
