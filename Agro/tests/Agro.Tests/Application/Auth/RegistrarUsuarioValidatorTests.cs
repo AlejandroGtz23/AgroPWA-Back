@@ -33,6 +33,22 @@ public class RegistrarUsuarioValidatorTests
         AssertInvalido(Valido with { Nombre = nombre }, campo);
     }
 
+    [Fact]
+    public void Nombre_o_apellido_que_no_llegan_son_invalidos_sin_lanzar_excepcion()
+    {
+        // Si el JSON no trae el campo llega null: antes .Trim() lanzaba NullReferenceException (500)
+        AssertInvalido(Valido with { Nombre = null! }, nameof(RegistrarUsuarioCommand.Nombre));
+        AssertInvalido(Valido with { ApellidoPaterno = null! }, nameof(RegistrarUsuarioCommand.ApellidoPaterno));
+    }
+
+    [Fact]
+    public void Un_campo_vacio_muestra_un_solo_mensaje()
+    {
+        var resultado = _validador.Validate(Valido with { Nombre = "" });
+
+        Assert.Single(resultado.Errors, e => e.PropertyName == nameof(RegistrarUsuarioCommand.Nombre));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(" J ")]
