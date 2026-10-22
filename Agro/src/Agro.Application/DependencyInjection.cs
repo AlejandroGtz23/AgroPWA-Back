@@ -1,3 +1,4 @@
+using Agro.Application.Auth.Commands.CerrarSesion;
 using Agro.Application.Auth.Commands.IniciarSesion;
 using Agro.Application.Auth.Commands.RegistrarUsuario;
 using Agro.Application.Auth.Commands.RenovarSesion;
@@ -30,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<RegistrarUsuarioHandler>();
         services.AddScoped<IniciarSesionHandler>();
         services.AddScoped<RenovarSesionHandler>();
+        services.AddScoped<CerrarSesionHandler>();
 
         return services;
     }

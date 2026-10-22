@@ -29,4 +29,7 @@ public interface IAuthProcedimientos
     /// <summary>sp_renovar_sesion: rota jti y refresh token. Devuelve el usuario, o null si la sesión ya no es válida.</summary>
     Task<UsuarioSesionDto?> RenovarSesionAsync(string refreshTokenHash, string nuevoJti,
         string nuevoRefreshTokenHash, int minutosInactividad, CancellationToken ct = default);
+
+    /// <summary>sp_cerrar_sesion: cierra la sesión del jti (motivo «logout»). false si ya estaba cerrada.</summary>
+    Task<bool> CerrarSesionAsync(string jti, CancellationToken ct = default);
 }

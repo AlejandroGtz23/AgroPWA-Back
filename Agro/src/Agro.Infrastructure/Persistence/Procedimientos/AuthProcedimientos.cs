@@ -94,6 +94,9 @@ public sealed class AuthProcedimientos(AgroDbContext db) : IAuthProcedimientos
         return usuarios.FirstOrDefault();   // vacío = sesión vencida, cerrada o refresh token ya usado
     }
 
+    public async Task<bool> CerrarSesionAsync(string jti, CancellationToken ct = default) =>
+    Convert.ToBoolean(await EjecutarAsync("CALL sp_cerrar_sesion(@jti, NULL)", ct,
+        Parametro("jti", NpgsqlDbType.Varchar, jti)));
     // ---------------- Métodos comunes ----------------
     private async Task<object?> EjecutarAsync(string sql, CancellationToken ct, params NpgsqlParameter[] parametros)
     {

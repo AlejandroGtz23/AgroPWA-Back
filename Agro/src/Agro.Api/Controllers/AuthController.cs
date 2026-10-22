@@ -1,12 +1,13 @@
-﻿using Agro.Application.Auth.Commands.IniciarSesion;
+﻿using Agro.Application.Auth.Commands.CerrarSesion;
+using Agro.Application.Auth.Commands.IniciarSesion;
 using Agro.Application.Auth.Commands.RegistrarUsuario;
-using Agro.Application.Auth.Common;
-using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 using Agro.Application.Auth.Commands.RenovarSesion;
+using Agro.Application.Auth.Common;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.JsonWebTokens;
+using System.Security.Claims;
 
 namespace Agro.Api.Controllers;
 /// <summary>
@@ -20,7 +21,8 @@ namespace Agro.Api.Controllers;
 public class AuthController(
     RegistrarUsuarioHandler registrarUsuario,
     IniciarSesionHandler iniciarSesion,
-    RenovarSesionHandler renovarSesion) : ControllerBase
+    RenovarSesionHandler renovarSesion,
+    CerrarSesionHandler cerrarSesion) : ControllerBase
 {
     [HttpPost("registro")]
     [ProducesResponseType<SesionDto>(StatusCodes.Status201Created)]
@@ -70,5 +72,18 @@ public class AuthController(
         var agente = Request.Headers.UserAgent.ToString();
         return (HttpContext.Connection.RemoteIpAddress?.ToString(),
                 agente.Length == 0 ? null : agente[..Math.Min(agente.Length, 300)]);   // columna VARCHAR(300)
+    }
+
+
+    /// <summary>Cierra la sesión actual. 204 cerrada · 401 sin token o sesión ya cerrada.</summary>
+    [Authorize]
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> CerrarSesion(CancellationToken ct)
+    {
+        var jti = User.FindFirstValue(JwtRegisteredClaimNames.Jti)!;   // del token ya validado
+        await cerrarSesion.EjecutarAsync(new CerrarSesionCommand(jti), ct);
+        return NoContent();
     }
 }
