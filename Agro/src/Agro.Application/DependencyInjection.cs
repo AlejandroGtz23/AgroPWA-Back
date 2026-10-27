@@ -3,6 +3,9 @@ using Agro.Application.Auth.Commands.IniciarSesion;
 using Agro.Application.Auth.Commands.RegistrarUsuario;
 using Agro.Application.Auth.Commands.RenovarSesion;
 using Agro.Application.Auth.Common;
+using Agro.Application.Parcelas.Commands.EditarParcela;
+using Agro.Application.Parcelas.Commands.RegistrarParcela;
+using Agro.Application.Parcelas.Queries.ObtenerMisParcelas;
 using Agro.Application.Salud.Queries.ComprobarSalud;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,6 +35,11 @@ public static class DependencyInjection
         services.AddScoped<IniciarSesionHandler>();
         services.AddScoped<RenovarSesionHandler>();
         services.AddScoped<CerrarSesionHandler>();
+
+        // Parcelas (HU-13)
+        services.AddScoped<RegistrarParcelaHandler>();
+        services.AddScoped<EditarParcelaHandler>();
+        services.AddScoped<ObtenerMisParcelasHandler>();
 
         return services;
     }
