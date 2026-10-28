@@ -11,6 +11,7 @@ API REST de **Agro**, la PWA para el registro y seguimiento de cultivos.
 HU-04 · Configuración del entorno backend · HU-07 · Configuración del despliegue · Sprint 1
 HU-29 · Análisis estático de calidad de código · HU-31 · Documentación de la API con Swagger · Sprint 3
 HU-09 · Registro de usuario · HU-10 · Inicio de sesión · HU-11 · Cerrar sesión · Sprint 4 (backend)
+HU-12 · Dashboard principal · HU-13 · Registrar parcela · Sprint 5 (backend)
 Equipo: Victor Manuel Jose Jose · Jesus Alejandro Gutierrez Montufar (10 IDGS-G3, UTTT)
 
 **API en producción (Azure):** `https://agropwa-api-cfcfcdbhdddqh7a7.centralus-01.azurewebsites.net`
@@ -42,7 +43,7 @@ Api ──► Application ──► Domain
 | Proyecto | Responsabilidad |
 |---|---|
 | `Agro.Domain` | Entidades de `agro_db` (Usuario, Cultivo, Sesion…). No depende de nada |
-| `Agro.Application` | Casos de uso por funcionalidad: **Commands** (escriben) y **Queries** (leen), validadores, interfaces (`IAgroDbContext`, `IAuthProcedimientos`, `IGeneradorJwt`, `IHashContrasena`) y excepciones de negocio |
+| `Agro.Application` | Casos de uso por funcionalidad: **Commands** (escriben) y **Queries** (leen), validadores, interfaces (`IAgroDbContext`, `I…Procedimientos`, `IGeneradorJwt`, `IHashContrasena`) y excepciones de negocio |
 | `Agro.Infrastructure` | Implementaciones técnicas: `AgroDbContext`, llamadas a los **procedimientos almacenados**, BCrypt, JWT y lectura del `.env` |
 | `Agro.Api` | Controladores, autenticación JWT, límite de peticiones, manejo de errores, CORS y arranque (`Program.cs`) |
 | `Agro.Tests` | Pruebas unitarias de Application e Infrastructure/Security (sin base de datos) |
@@ -62,27 +63,38 @@ Agro/
 │   │   │   ├── Commands/RenovarSesion/           command + handler + validador   (HU-10)
 │   │   │   ├── Commands/CerrarSesion/            command + handler               (HU-11)
 │   │   │   └── Common/                           CreadorSesion, ValidadorSesion, ReglasSesion, DTOs
+│   │   ├── Parcelas/
+│   │   │   ├── Commands/RegistrarParcela/        command + handler + validador   (HU-13)
+│   │   │   ├── Commands/EditarParcela/           command + handler + validador   (HU-13)
+│   │   │   ├── Queries/ObtenerMisParcelas/       handler                         (HU-13)
+│   │   │   └── Common/                           ParcelaDto, ReglasParcela (reglas compartidas)
+│   │   ├── Dashboard/
+│   │   │   ├── Queries/ObtenerResumenDashboard/  handler                         (HU-12)
+│   │   │   └── Common/                           ResumenDashboardDto, GuiaDashboardDto, ActividadRecienteDto
 │   │   ├── Common/
-│   │   │   ├── Exceptions/                       Conflicto (409), NoAutorizado (401), DemasiadosIntentos (429)
-│   │   │   ├── Interfaces/                       IAgroDbContext, IAuthProcedimientos, IGeneradorJwt, IHashContrasena
+│   │   │   ├── Exceptions/                       Conflicto (409), NoEncontrado (404), NoAutorizado (401), DemasiadosIntentos (429)
+│   │   │   ├── Interfaces/                       IAgroDbContext, IAuthProcedimientos, IParcelasProcedimientos,
+│   │   │   │                                     IDashboardProcedimientos, IGeneradorJwt, IHashContrasena
 │   │   │   └── Models/                           datos que viajan a los procedimientos
 │   │   ├── Salud/Queries/ComprobarSalud/         query + DTO de /api/salud
 │   │   └── DependencyInjection.cs                AddApplication()
 │   ├── Agro.Infrastructure/
 │   │   ├── Configuration/                        lectura del .env, cadena de conexión y ConfiguracionJwt
 │   │   ├── Persistence/                          AgroDbContext + verificación de conexión
-│   │   │   └── Procedimientos/AuthProcedimientos.cs   CALL a los procedimientos almacenados
+│   │   │   └── Procedimientos/                   ProcedimientosBase (métodos comunes) + Auth, Parcelas y Dashboard
 │   │   ├── Security/                             HashContrasenaBCrypt, GeneradorJwt
 │   │   └── DependencyInjection.cs                AddInfraestructure()
 │   └── Agro.Api/
 │       ├── Configuration/                        AutenticacionJwt, DocumentacionApi (Swagger)
-│       ├── Controllers/                          SaludController, AuthController
+│       ├── Controllers/                          Salud, Auth, Parcelas y Dashboard
 │       ├── Middleware/ManejadorExcepciones.cs
 │       ├── Program.cs
 │       └── .env.example
 └── tests/Agro.Tests/
     ├── Application/Salud/                        pruebas de ComprobarSalud
     ├── Application/Auth/                         registro, login, sesión, validador + objetos falsos
+    ├── Application/Parcelas/                     registrar, editar, consultar y reglas + falso en memoria
+    ├── Application/Dashboard/                    resumen del dashboard + falso
     └── Infrastructure/Security/                  BCrypt y JWT
 ```
 
@@ -163,11 +175,52 @@ Las rutas protegidas reciben el encabezado `Authorization: Bearer <accessToken>`
 | Límite de peticiones | 10 por minuto por IP en `/login` (fuerza bruta) |
 | Cerrar sesión | `sp_cerrar_sesion` marca `fecha_cierre` y `motivo_cierre = 'logout'`; el access token y el refresh token dejan de servir aunque no hayan vencido |
 
-### Acceso a datos: solo procedimientos almacenados
+## Parcelas (HU-13)
 
-Por seguridad, la API **no hace consultas directas** a las tablas. `AuthProcedimientos` ejecuta procedimientos
-almacenados con parámetros tipados (`NpgsqlParameter`), y el usuario `agro_app` **solo tiene permiso `EXECUTE`**
-(migración 010 de AgroPWA-BD).
+Todas las rutas llevan `[Authorize]`; el usuario sale del token, así que nadie puede ver ni editar parcelas ajenas.
+
+| Método y ruta | Respuestas |
+|---|---|
+| `GET /api/parcelas` | **200** `[ { id, idLocal, nombre, superficieHa, ubicacionReferencia, numeroCultivos } ]`, ordenadas por nombre |
+| `POST /api/parcelas` | **201** parcela nueva · **200** si el `idLocal` ya existía (devuelve la misma, sin duplicar) · **400** · **409** |
+| `PUT /api/parcelas/{id}` | **200** parcela editada · **400** · **404** no existe o no es tuya · **409** |
+
+```json
+{ "idLocal": "3fa85f64-5717-4562-b3fc-2c963f66afa6", "nombre": "Parcela Norte", "superficieHa": 1.5, "ubicacionReferencia": "San Marcos" }
+```
+
+| Regla | Dónde se cumple |
+|---|---|
+| Nombre obligatorio (máx. 80) y **único por usuario** sin distinguir mayúsculas → 409 «Ya tienes una parcela con ese nombre.» | `ReglasParcela` + `sp_registrar_parcela` / `sp_editar_parcela` |
+| Superficie > 0, máximo 999,999.99 ha y **2 decimales** («Ingresa un número válido.») | `ReglasParcela` (columna `NUMERIC(8,2)`) |
+| Ubicación opcional (máx. 150); vacía se guarda como `null` | `ReglasParcela.Normalizar` |
+| `idLocal` (UUID generado en el dispositivo): si llega repetido, se devuelve la parcela existente | `sp_registrar_parcela` → `p_ya_existia` |
+| Editar reemplaza **todos** los campos: el frontend envía la parcela completa | `sp_editar_parcela` |
+
+Registrar y editar comparten las reglas con métodos de extensión de FluentValidation (`NombreParcela()`,
+`Superficie()`, `Ubicacion()`), así no hay código duplicado.
+
+## Dashboard (HU-12)
+
+`GET /api/dashboard/resumen` (`[Authorize]`) → **200** · **404** si el usuario no existe o está desactivado.
+
+```json
+{ "nombre": "Juan", "cultivosActivos": 4, "avancesDelMes": 7,
+  "guia": { "tieneParcela": true, "tieneCultivo": true, "tieneAvance": false },
+  "actividadReciente": [ { "tipo": "Riego", "cultivo": "Maíz criollo", "fecha": "2026-10-08T14:30:00Z" } ] }
+```
+
+- Todos los totales son **solo del usuario del token**.
+- **Avances del mes** se cuentan con el mes en hora de México (`America/Mexico_City`), no en UTC.
+- `actividadReciente`: los últimos 5 avances, del más reciente al más antiguo. Las fechas van en UTC.
+- Un usuario sin datos recibe todo en `0`, la guía en `false` y la actividad vacía (criterio 3).
+- **Pendientes de sincronizar** no viene de la API: lo cuenta el frontend en IndexedDB.
+
+## Acceso a datos: solo procedimientos almacenados
+
+Por seguridad, la API **no hace consultas directas** a las tablas. Las clases de `Persistence/Procedimientos`
+ejecutan procedimientos almacenados con parámetros tipados (`NpgsqlParameter`), y el usuario `agro_app`
+**solo tiene permiso `EXECUTE`** (migración 010 de AgroPWA-BD).
 
 | Procedimiento | Uso | Migración |
 |---|---|---|
@@ -178,11 +231,38 @@ almacenados con parámetros tipados (`NpgsqlParameter`), y el usuario `agro_app`
 | `sp_validar_sesion` | Valida y actualiza la actividad de la sesión | 008 |
 | `sp_renovar_sesion` | Rota `jti` y refresh token (cursor con el usuario) | 008 |
 | `sp_cerrar_sesion` | Cierra la sesión (logout) | 009 |
+| `sp_registrar_parcela` | Registra la parcela o devuelve la existente por `idLocal`; nombre repetido → 409 | 011 |
+| `sp_editar_parcela` | Edita una parcela del usuario; `false` → 404 | 011 |
+| `sp_obtener_parcelas` | Parcelas activas con su número de cultivos (cursor) | 011 |
+| `sp_obtener_resumen_dashboard` | Totales y pasos de la guía (cursor) | 012 |
+| `sp_obtener_actividad_reciente` | Últimos avances: tipo, cultivo y fecha (cursor) | 012 |
 
-- **Escrituras:** `CALL sp_x(@p1, …, NULL)` y el valor `INOUT` se lee con `ExecuteScalar`.
-- **Lecturas:** el procedimiento abre un `REFCURSOR` llamado `resultado`; dentro de una transacción se hace
-  `CALL …` y luego `FETCH ALL FROM resultado`.
-- Los procedimientos son `SECURITY DEFINER` con `search_path = public`.
+`ProcedimientosBase` tiene los métodos comunes que heredan `AuthProcedimientos`, `ParcelasProcedimientos` y
+`DashboardProcedimientos`:
+
+| Método | Para |
+|---|---|
+| `EjecutarAsync` | `CALL` con un solo valor `INOUT` o ninguno (`ExecuteScalar`; devuelve `null` si no hay fila) |
+| `EjecutarFilaAsync` | `CALL` con varios valores `INOUT` (lee la única fila, p. ej. `p_id_parcela` y `p_ya_existia`) |
+| `ConsultarAsync` | Procedimientos de lectura: en una transacción, `CALL …` y luego `FETCH ALL FROM resultado` |
+| `Parametro` | Crea un `NpgsqlParameter` tipado (`null` → `DBNull.Value`) |
+
+Los procedimientos son `SECURITY DEFINER` con `search_path = public`.
+
+## Respuestas de error
+
+Todos los errores son JSON (ProblemDetails) en español:
+
+| Código | Cuándo | Origen |
+|---|---|---|
+| 400 | Datos que no cumplen las reglas · JSON con un tipo incorrecto (letras en un número, fecha inválida) | FluentValidation · `InvalidModelStateResponseFactory` en `Program.cs` |
+| 401 | Sin token, token vencido o sesión cerrada · credenciales incorrectas | JwtBearer · `NoAutorizadoException` |
+| 404 | El recurso no existe o es de otro usuario | `NoEncontradoException` |
+| 409 | Dato repetido (correo, nombre de parcela) | `ConflictoException` |
+| 429 | Cuenta bloqueada o demasiadas peticiones al login | `DemasiadosIntentosException` · rate limiter |
+| 503 | Sin conexión con la base de datos | `ManejadorExcepciones` |
+
+Los 400 incluyen los errores por campo: `{ "errores": { "superficieHa": ["Ingresa un número válido."] } }`.
 
 ## Pruebas unitarias
 
@@ -203,10 +283,15 @@ dotnet test Agro/Agro.slnx --collect:"XPlat Code Coverage"
 | `Application/Auth/RegistrarUsuarioHandlerTests` | Registro con rol productor, contraseña con hash, correo en minúsculas, opcionales en null, correo duplicado (409) |
 | `Application/Auth/RegistrarUsuarioValidatorTests` | Cada regla del formulario de registro, incluidos los campos que no llegan (`null`) |
 | `Application/Auth/SesionTests` | Duración con y sin «Recordarme», validar, renovar y cerrar sesión |
+| `Application/Parcelas/ParcelasHandlersTests` | Registrar (201/200 por `idLocal`, espacios, 409, 400), editar (200, 404 propio y ajeno, 409, 400) y consultar solo las propias |
+| `Application/Parcelas/ReglasParcelaTests` | Nombre, superficie (0, negativa, 3 decimales, máximo), ubicación, un solo mensaje por campo y `Normalizar` |
+| `Application/Dashboard/ObtenerResumenDashboardHandlerTests` | Usuario sin datos en 0, totales y guía, actividad con máximo 5, usuario inexistente (404) |
 | `Infrastructure/Security/SeguridadTests` | BCrypt, contenido del JWT y refresh token (aleatorio + SHA-256) |
 
-Las pruebas no usan base de datos: `Falsos.cs` reemplaza los procedimientos almacenados, el JWT y el hash por
-objetos falsos que guardan lo que reciben.
+**80 pruebas.** Ninguna usa base de datos: los archivos de falsos (`Falsos.cs`, `ParcelasFalsas.cs`,
+`DashboardProcedimientosFalsos.cs`) reemplazan los procedimientos almacenados, el JWT y el hash por objetos que
+devuelven lo que cada prueba necesita y guardan lo que reciben. `ParcelasFalsas.cs` aplica en memoria las mismas
+reglas que los procedimientos de la migración 011.
 
 ## Calidad de código · SonarQube Cloud (HU-29)
 
@@ -250,13 +335,13 @@ El scanner trabaja en tres fases: `begin` (se engancha al compilador) → `dotne
 
 ### Resultados
 
-| Métrica | Sprint 3 (inicial) | Sprint 3 (final) | Sprint 4 |
-|---|---|---|---|
-| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) | 0 |
-| Code smells | 3 | 0 | 0 |
-| Bugs | 0 | 0 | 0 |
-| Cobertura del código nuevo | — | — | **100 %** |
-| Quality Gate | — | **Passed** | **Passed** |
+| Métrica | Sprint 3 (inicial) | Sprint 3 (final) | Sprint 4 | Sprint 5 |
+|---|---|---|---|---|
+| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) | 0 | 0 |
+| Code smells | 3 | 0 | 0 | 0 |
+| Bugs | 0 | 0 | 0 | 0 |
+| Cobertura del código nuevo | — | — | **100 %** | **98 %** |
+| Quality Gate | — | **Passed** | **Passed** | **Passed** |
 
 | Regla | Archivo | Corrección |
 |---|---|---|
@@ -268,6 +353,7 @@ El scanner trabaja en tres fases: `begin` (se engancha al compilador) → `dotne
 Detalle de las correcciones: PR [#24](https://github.com/AlejandroGtz23/AgroPWA-Back/pull/24).
 En el Sprint 4 el Quality Gate falló al inicio por **0 % de cobertura** del código nuevo; se resolvió con
 las pruebas de autenticación y las exclusiones de cobertura (PR [#30](https://github.com/AlejandroGtz23/AgroPWA-Back/pull/30)).
+En el Sprint 5 pasó lo mismo con parcelas y el dashboard: cada funcionalidad nueva se sube junto con sus pruebas.
 
 ## Documentación de la API · Swagger (HU-31)
 
@@ -400,6 +486,20 @@ Todo cambio llega a `main` por Pull Request; cada PR ejecuta la compilación, la
 | Petición CORS desde un origen no permitido | Bloqueada |
 | Documentación `/swagger` y `/openapi/v1.json` | Solo en desarrollo (404 en producción) |
 
+### Verificación del despliegue (Sprint 5)
+
+Con una cuenta de prueba en producción, después de aplicar las migraciones 011 y 012 en Azure:
+
+| Prueba | Resultado |
+|---|---|
+| `GET /api/parcelas` y `GET /api/dashboard/resumen` sin token | 401 |
+| Dashboard de un usuario nuevo | 200 · todo en 0, guía en `false` |
+| `POST /api/parcelas` · otra vez con el mismo `idLocal` | 201 · 200 con el mismo `id` |
+| Nombre repetido · datos inválidos · letras en la superficie | 409 · 400 · 400 en español |
+| `PUT /api/parcelas/{id}` · id inexistente | 200 · 404 |
+| Dashboard después de registrar la parcela | `tieneParcela: true` |
+| Logout y luego usar el mismo token | 204 · 401 |
+
 > **Plan gratuito F1:** la app se suspende tras unos 20 minutos sin uso; la primera petición después
 > puede tardar de 10 a 30 segundos. Para no consumir crédito, el servidor PostgreSQL puede detenerse
 > desde el portal cuando no se use.
@@ -432,3 +532,8 @@ dotnet ef dbcontext scaffold "Name=ConnectionStrings:Agro" Npgsql.EntityFramewor
   interfaz en `Application/Common/Interfaces` y su implementación en `Infrastructure/Persistence/Procedimientos`.
 - Las rutas privadas llevan `[Authorize]`; el id del usuario sale del claim `sub` del token, nunca del cuerpo de la petición.
 - Cada handler nuevo lleva sus pruebas en `tests/Agro.Tests` para mantener la cobertura del código nuevo ≥ 80 %.
+- Las clases de procedimientos nuevas heredan de `ProcedimientosBase`; un procedimiento con varios `INOUT` se lee
+  con `EjecutarFilaAsync`.
+- Si dos commands validan los mismos campos, las reglas van en un `Reglas…` compartido (como `ReglasParcela`).
+- **Orden del despliegue:** primero las migraciones en Azure (AgroPWA-BD) y después el merge del backend a `main`;
+  si no, los endpoints nuevos responden 500 porque no encuentran sus procedimientos.
