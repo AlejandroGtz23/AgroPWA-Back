@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddSingleton(configuracionJwt);
         services.AddSingleton<IHashContrasena, HashContrasenaBCrypt>();
         services.AddSingleton<IGeneradorJwt, GeneradorJwt>();
+        services.AddScoped<IDashboardProcedimientos, DashboardProcedimientos>();
         return services;
     }
 }
