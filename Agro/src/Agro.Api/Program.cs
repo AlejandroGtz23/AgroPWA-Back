@@ -4,6 +4,7 @@ using Agro.Application;
 using Agro.Infrastructure;
 using Agro.Infrastructure.Configuration;
 using Agro.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Mvc;
 using System.Threading.RateLimiting;
 
 
@@ -48,7 +49,24 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ManejadorExcepciones>();
 
 builder.Services.AddControllers(opciones =>
-    opciones.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true);
+        opciones.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true)
+    .ConfigureApiBehaviorOptions(opciones =>
+        // JSON con un tipo incorrecto (letras en un número, fecha inválida): mismo formato que FluentValidation
+        opciones.InvalidModelStateResponseFactory = contexto =>
+        {
+            var detalle = new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Los datos enviados no son válidos."
+            };
+            detalle.Extensions["errores"] = contexto.ModelState
+                .Where(campo => campo.Key.StartsWith('$') && campo.Value?.Errors.Count > 0)
+                .ToDictionary(
+                    campo => System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(campo.Key.TrimStart('$', '.')),
+                    _ => new[] { "El valor no tiene el formato correcto." });
+
+            return new BadRequestObjectResult(detalle) { ContentTypes = { "application/problem+json" } };
+        });
 
 builder.Services.AddDocumentacionApi();                      // OpenAPI + botón Authorize (HU-31)
 builder.Services.AddAutenticacionJwt(configuracionJwt);      // JWT + validación de la sesión (HU-10)

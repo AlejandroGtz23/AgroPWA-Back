@@ -17,10 +17,12 @@ public static class DependencyInjection
         services.AddDbContext<AgroDbContext>(opciones => opciones.UseNpgsql(cadenaConexion));
         services.AddScoped<IAgroDbContext>(sp => sp.GetRequiredService<AgroDbContext>());
         services.AddScoped<IAuthProcedimientos, AuthProcedimientos>();
+        services.AddScoped<IParcelasProcedimientos, ParcelasProcedimientos>();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(configuracionJwt);
         services.AddSingleton<IHashContrasena, HashContrasenaBCrypt>();
         services.AddSingleton<IGeneradorJwt, GeneradorJwt>();
+        services.AddScoped<IDashboardProcedimientos, DashboardProcedimientos>();
         return services;
     }
 }

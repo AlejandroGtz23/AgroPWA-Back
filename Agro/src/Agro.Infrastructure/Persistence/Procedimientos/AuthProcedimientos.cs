@@ -2,14 +2,13 @@
 using Agro.Application.Common.Exceptions;
 using Agro.Application.Common.Interfaces;
 using Agro.Application.Common.Models;
-using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using NpgsqlTypes;
 
 namespace Agro.Infrastructure.Persistence.Procedimientos;
 
 /// <summary>Ejecuta los procedimientos almacenados de autenticación.</summary>
-public sealed class AuthProcedimientos(AgroDbContext db) : IAuthProcedimientos
+public sealed class AuthProcedimientos(AgroDbContext db) : ProcedimientosBase(db), IAuthProcedimientos
 {
     // ---------------- Consultas (procedimientos que abren un cursor) ----------------
     public async Task<UsuarioLogin?> ObtenerUsuarioLoginAsync(string correo, CancellationToken ct = default)
@@ -97,58 +96,4 @@ public sealed class AuthProcedimientos(AgroDbContext db) : IAuthProcedimientos
     public async Task<bool> CerrarSesionAsync(string jti, CancellationToken ct = default) =>
     Convert.ToBoolean(await EjecutarAsync("CALL sp_cerrar_sesion(@jti, NULL)", ct,
         Parametro("jti", NpgsqlDbType.Varchar, jti)));
-    // ---------------- Métodos comunes ----------------
-    private async Task<object?> EjecutarAsync(string sql, CancellationToken ct, params NpgsqlParameter[] parametros)
-    {
-        var conexion = (NpgsqlConnection)db.Database.GetDbConnection();
-        await db.Database.OpenConnectionAsync(ct);
-        try
-        {
-            await using var comando = new NpgsqlCommand(sql, conexion);
-            comando.Parameters.AddRange(parametros);
-            return await comando.ExecuteScalarAsync(ct);
-        }
-        finally
-        {
-            await db.Database.CloseConnectionAsync();
-        }
-    }
-
-    private async Task<List<T>> ConsultarAsync<T>(string sql, Func<NpgsqlDataReader, T> convertir,
-        CancellationToken ct, params NpgsqlParameter[] parametros)
-    {
-        var conexion = (NpgsqlConnection)db.Database.GetDbConnection();
-        await db.Database.OpenConnectionAsync(ct);
-        try
-        {
-            await using var transaccion = await conexion.BeginTransactionAsync(ct);
-
-            // 1. CALL: el procedimiento abre el cursor
-            await using (var llamada = new NpgsqlCommand(sql, conexion, transaccion))
-            {
-                llamada.Parameters.AddRange(parametros);
-                await llamada.ExecuteNonQueryAsync(ct);
-            }
-
-            // 2. FETCH: se leen todas las filas del cursor
-            var filas = new List<T>();
-            await using (var lectura = new NpgsqlCommand("FETCH ALL FROM resultado", conexion, transaccion))
-            await using (var lector = await lectura.ExecuteReaderAsync(ct))
-            {
-                while (await lector.ReadAsync(ct))
-                    filas.Add(convertir(lector));
-            }
-
-            await transaccion.CommitAsync(ct);   // al terminar la transacción, el cursor se cierra solo
-            return filas;
-        }
-        finally
-        {
-            await db.Database.CloseConnectionAsync();
-        }
-    }
-    private static NpgsqlParameter Parametro(string nombre, NpgsqlDbType tipo, object? valor) =>
-        new(nombre, tipo) { Value = valor ?? DBNull.Value };
-
-
 }
