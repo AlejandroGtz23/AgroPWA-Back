@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddSingleton<IHashContrasena, HashContrasenaBCrypt>();
         services.AddSingleton<IGeneradorJwt, GeneradorJwt>();
         services.AddScoped<IDashboardProcedimientos, DashboardProcedimientos>();
+        services.AddScoped<ICultivosProcedimientos, CultivosProcedimientos>();
         return services;
     }
 }
