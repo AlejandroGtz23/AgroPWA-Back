@@ -1,4 +1,5 @@
-﻿using FluentValidation;
+﻿using Agro.Application.Cultivos.Common;
+using FluentValidation;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -6,7 +7,6 @@ using System.Text;
 namespace Agro.Application.Cultivos.Queries.ObtenerMisCultivos;
 public sealed class ObtenerMisCultivosValidator : AbstractValidator<ObtenerMisCultivosQuery>
 {
-    public static readonly string[] Estados = ["activo", "finalizado", "perdido"];   // CHECK de la tabla cultivo
     public const int TamanoMaximo = 50;
 
     public ObtenerMisCultivosValidator()
@@ -14,7 +14,7 @@ public sealed class ObtenerMisCultivosValidator : AbstractValidator<ObtenerMisCu
         RuleFor(x => x.Buscar).MaximumLength(80).WithMessage("La búsqueda no puede tener más de 80 caracteres.");
 
         RuleFor(x => x.Estado)
-            .Must(e => string.IsNullOrWhiteSpace(e) || Estados.Contains(e.Trim().ToLowerInvariant()))
+            .Must(e => string.IsNullOrWhiteSpace(e) || ReglasCultivo.Estados.Contains(e.Trim().ToLowerInvariant()))
             .WithMessage("El estado debe ser activo, finalizado o perdido.");
 
         RuleFor(x => x.Pagina).GreaterThanOrEqualTo(1).WithMessage("La página debe ser 1 o mayor.");

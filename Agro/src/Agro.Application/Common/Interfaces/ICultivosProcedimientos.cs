@@ -19,4 +19,7 @@ public interface ICultivosProcedimientos
     Task<IReadOnlyList<AvanceResumenDto>> ObtenerAvancesAsync(int idCultivo, int idUsuario, CancellationToken ct = default);
 
     Task<IReadOnlyList<FotografiaDto>> ObtenerFotografiasAsync(int idCultivo, int idUsuario, CancellationToken ct = default);
+
+    Task<bool> EliminarAsync(int idCultivo, int idUsuario, CancellationToken ct = default);
+    Task<bool> EditarAsync(int idCultivo, int idUsuario, CultivoEditado cambios, CancellationToken ct = default);
 }

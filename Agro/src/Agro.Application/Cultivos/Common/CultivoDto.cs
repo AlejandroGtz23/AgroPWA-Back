@@ -13,7 +13,7 @@ public sealed record CultivoDto(
     int Id, Guid? IdLocal, string Nombre, int IdTipoCultivo, string Tipo, string? Variedad,
     int IdParcela, string Parcela, decimal SuperficieHa,
     DateOnly FechaSiembra, DateOnly? FechaCosecha, int DiasCultivo,
-    string Estado, string EstadoSincronizacion, string? Observaciones, string? PortadaUrl);
+    string Estado, string EstadoSincronizacion, string? Observaciones, string? PortadaUrl, DateTimeOffset FechaActualizacion);
 
 public sealed record AvanceResumenDto(int Id, string Tipo, DateTime FechaActividad, string Descripcion, int Fotos);
 

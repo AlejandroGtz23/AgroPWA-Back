@@ -4,6 +4,8 @@ using Agro.Application.Auth.Commands.RegistrarUsuario;
 using Agro.Application.Auth.Commands.RenovarSesion;
 using Agro.Application.Auth.Common;
 using Agro.Application.Catalogos.Queries.ObtenerTiposCultivo;
+using Agro.Application.Cultivos.Commands.EditarCultivo;
+using Agro.Application.Cultivos.Commands.EliminarCultivo;
 using Agro.Application.Cultivos.Commands.RegistrarCultivo;
 using Agro.Application.Cultivos.Queries.ObtenerDetalleCultivo;
 using Agro.Application.Cultivos.Queries.ObtenerMisCultivos;
@@ -54,6 +56,8 @@ public static class DependencyInjection
         services.AddScoped<RegistrarCultivoHandler>();
         services.AddScoped<ObtenerMisCultivosHandler>();
         services.AddScoped<ObtenerDetalleCultivoHandler>();
+        services.AddScoped<EditarCultivoHandler>();
+        services.AddScoped<EliminarCultivoHandler>();
 
         return services;
     }
