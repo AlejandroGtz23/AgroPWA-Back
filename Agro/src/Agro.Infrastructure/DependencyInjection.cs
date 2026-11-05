@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddSingleton<IGeneradorJwt, GeneradorJwt>();
         services.AddScoped<IDashboardProcedimientos, DashboardProcedimientos>();
         services.AddScoped<ICultivosProcedimientos, CultivosProcedimientos>();
+        services.AddScoped<IContactoProcedimientos, ContactoProcedimientos>();
         return services;
     }
 }
