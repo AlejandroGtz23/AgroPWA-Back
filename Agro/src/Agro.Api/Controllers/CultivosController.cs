@@ -1,4 +1,6 @@
 ﻿using Agro.Application.Common.Models;
+using Agro.Application.Cultivos.Commands.EditarCultivo;
+using Agro.Application.Cultivos.Commands.EliminarCultivo;
 using Agro.Application.Cultivos.Commands.RegistrarCultivo;
 using Agro.Application.Cultivos.Common;
 using Agro.Application.Cultivos.Queries.ObtenerDetalleCultivo;
@@ -16,7 +18,9 @@ namespace Agro.Api.Controllers;
 [Produces("application/json")]
 public class CultivosController(RegistrarCultivoHandler registrarCultivo, 
     ObtenerMisCultivosHandler obtenerMisCultivos,
-    ObtenerDetalleCultivoHandler obtenerDetalle) : ControllerBase
+    ObtenerDetalleCultivoHandler obtenerDetalle,
+    EliminarCultivoHandler eliminarCultivo,
+    EditarCultivoHandler editarCultivo ) : ControllerBase
 {
     private int IdUsuario => int.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
 
@@ -46,4 +50,22 @@ public class CultivosController(RegistrarCultivoHandler registrarCultivo,
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<DetalleCultivoDto>> ObtenerDetalle(int id, CancellationToken ct) =>
     Ok(await obtenerDetalle.EjecutarAsync(id, IdUsuario, ct));
+
+    [HttpDelete("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Eliminar(int id, CancellationToken ct)
+    {
+        await eliminarCultivo.EjecutarAsync(id, IdUsuario, ct);
+        return NoContent();   // 204: eliminado, sin cuerpo
+    }
+
+    [HttpPut("{id:int}")]
+    [ProducesResponseType<CultivoDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<CultivoDto>> Editar(int id, EditarCultivoCommand comando, CancellationToken ct) =>
+    Ok(await editarCultivo.EjecutarAsync(id, IdUsuario, comando, ct));
 }
