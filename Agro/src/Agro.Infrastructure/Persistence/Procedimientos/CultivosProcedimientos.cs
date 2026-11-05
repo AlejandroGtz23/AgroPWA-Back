@@ -36,9 +36,7 @@ public sealed class CultivosProcedimientos(AgroDbContext db) : ProcedimientosBas
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.NoDataFound)
         {
-            // El procedimiento indica la columna: se responde 400 con el error en ese campo
-            var campo = ex.ColumnName == "id_parcela" ? "idParcela" : "idTipoCultivo";
-            throw new FluentValidation.ValidationException([new ValidationFailure(campo, ex.MessageText)]);
+            throw ErrorDeCampo(ex);
         }
     }
     public async Task<Pagina<CultivoResumenDto>> ObtenerAsync(int idUsuario, FiltroCultivos filtro,
@@ -100,7 +98,8 @@ public sealed class CultivosProcedimientos(AgroDbContext db) : ProcedimientosBas
                     lector.GetString(lector.GetOrdinal("estado")),
                     lector.GetString(lector.GetOrdinal("estado_sincronizacion")),
                     lector.IsDBNull(lector.GetOrdinal("observaciones")) ? null : lector.GetString(lector.GetOrdinal("observaciones")),
-                    lector.IsDBNull(lector.GetOrdinal("portada_url")) ? null : lector.GetString(lector.GetOrdinal("portada_url"))),
+                    lector.IsDBNull(lector.GetOrdinal("portada_url")) ? null : lector.GetString(lector.GetOrdinal("portada_url")),
+                    lector.GetFieldValue<DateTimeOffset>(lector.GetOrdinal("fecha_actualizacion"))),
                 lector.GetInt32(lector.GetOrdinal("total_avances")),
                 lector.GetInt32(lector.GetOrdinal("total_fotografias"))),
             ct,
@@ -136,4 +135,41 @@ public sealed class CultivosProcedimientos(AgroDbContext db) : ProcedimientosBas
             ct,
             Parametro("id_cultivo", NpgsqlDbType.Integer, idCultivo),
             Parametro("id_usuario", NpgsqlDbType.Integer, idUsuario));
+
+
+    public async Task<bool> EliminarAsync(int idCultivo, int idUsuario, CancellationToken ct = default) =>
+    Convert.ToBoolean(await EjecutarAsync(
+        "CALL sp_eliminar_cultivo(@id_cultivo, @id_usuario, NULL)", ct,
+        Parametro("id_cultivo", NpgsqlDbType.Integer, idCultivo),
+        Parametro("id_usuario", NpgsqlDbType.Integer, idUsuario)));
+
+    public async Task<bool> EditarAsync(int idCultivo, int idUsuario, CultivoEditado cambios, CancellationToken ct = default)
+    {
+        try
+        {
+            return Convert.ToBoolean(await EjecutarAsync(
+                "CALL sp_editar_cultivo(@id_cultivo, @id_usuario, @id_parcela, @id_tipo, @nombre, @variedad, @siembra, @estado, @cosecha, @observaciones, @modificacion, NULL, NULL)", ct,
+                Parametro("id_cultivo", NpgsqlDbType.Integer, idCultivo),
+                Parametro("id_usuario", NpgsqlDbType.Integer, idUsuario),
+                Parametro("id_parcela", NpgsqlDbType.Integer, cambios.Datos.IdParcela),
+                Parametro("id_tipo", NpgsqlDbType.Integer, cambios.Datos.IdTipoCultivo),
+                Parametro("nombre", NpgsqlDbType.Varchar, cambios.Datos.Nombre),
+                Parametro("variedad", NpgsqlDbType.Varchar, cambios.Datos.Variedad),
+                Parametro("siembra", NpgsqlDbType.Date, cambios.Datos.FechaSiembra),
+                Parametro("estado", NpgsqlDbType.Varchar, cambios.Estado),
+                Parametro("cosecha", NpgsqlDbType.Date, cambios.FechaCosecha),
+                Parametro("observaciones", NpgsqlDbType.Varchar, cambios.Datos.Observaciones),
+                // Npgsql solo acepta DateTimeOffset en UTC para timestamptz
+                Parametro("modificacion", NpgsqlDbType.TimestampTz, cambios.FechaModificacion?.ToUniversalTime())));
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.NoDataFound)
+        {
+            throw ErrorDeCampo(ex);
+        }
+    }
+
+
+    /// <summary>El procedimiento indica la columna (P0002): se responde 400 con el error en ese campo.</summary>
+    private static FluentValidation.ValidationException ErrorDeCampo(PostgresException ex) =>
+        new([new ValidationFailure(ex.ColumnName == "id_parcela" ? "idParcela" : "idTipoCultivo", ex.MessageText)]);
 }

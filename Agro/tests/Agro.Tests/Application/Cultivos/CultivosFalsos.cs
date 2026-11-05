@@ -50,7 +50,7 @@ internal sealed class CultivosProcedimientosFalsos : ICultivosProcedimientos
         var cultivo = new CultivoDto(
             _cultivos.Count + 1, idLocal, datos.Nombre, tipo.Id, tipo.Nombre, datos.Variedad,
             datos.IdParcela, $"Parcela {datos.IdParcela}", 1.5m, datos.FechaSiembra, FechaCosecha: null,
-            DiasCultivo: 10, Estado: "activo", EstadoSincronizacion: "sincronizado", datos.Observaciones, PortadaUrl: null);
+            DiasCultivo: 10, Estado: "activo", EstadoSincronizacion: "sincronizado", datos.Observaciones, PortadaUrl: null, FechaActualizacion: DateTimeOffset.UnixEpoch);
         _cultivos.Add((idUsuario, cultivo));
         return Task.FromResult(new CultivoRegistrado(cultivo.Id, YaExistia: false));
     }
@@ -85,6 +85,31 @@ internal sealed class CultivosProcedimientosFalsos : ICultivosProcedimientos
     public Task<IReadOnlyList<FotografiaDto>> ObtenerFotografiasAsync(int idCultivo, int idUsuario,
         CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<FotografiaDto>>(Fotografias);
+
+    public Task<bool> EliminarAsync(int idCultivo, int idUsuario, 
+        CancellationToken ct = default) =>
+        Task.FromResult(_cultivos.RemoveAll(c => c.IdUsuario == idUsuario && c.Cultivo.Id == idCultivo) > 0);
+
+    public CultivoEditado? UltimoCambio { get; private set; }
+
+    public Task<bool> EditarAsync(int idCultivo, int idUsuario, CultivoEditado cambios, CancellationToken ct = default)
+    {
+        var i = _cultivos.FindIndex(c => c.IdUsuario == idUsuario && c.Cultivo.Id == idCultivo);
+        if (i < 0) return Task.FromResult(false);                       // no existe o no es suyo
+
+        UltimoCambio = cambios;
+        var d = cambios.Datos;
+        _cultivos[i] = (idUsuario, _cultivos[i].Cultivo with
+        {
+            Nombre = d.Nombre,
+            Variedad = d.Variedad,
+            FechaSiembra = d.FechaSiembra,
+            Observaciones = d.Observaciones,
+            Estado = cambios.Estado,
+            FechaCosecha = ReglasCultivo.EsFinalizado(cambios.Estado) ? cambios.FechaCosecha : null
+        });
+        return Task.FromResult(true);
+    }
 }
 
 /// <summary>Reloj con una hora fija, para que las pruebas de fechas no dependan del día en que se ejecutan.</summary>
