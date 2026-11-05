@@ -12,6 +12,7 @@ HU-04 · Configuración del entorno backend · HU-07 · Configuración del despl
 HU-29 · Análisis estático de calidad de código · HU-31 · Documentación de la API con Swagger · Sprint 3
 HU-09 · Registro de usuario · HU-10 · Inicio de sesión · HU-11 · Cerrar sesión · Sprint 4 (backend)
 HU-12 · Dashboard principal · HU-13 · Registrar parcela · Sprint 5 (backend)
+HU-14 · Registrar cultivo · HU-15 · Consultar cultivos · HU-16 · Detalle del cultivo · Sprint 6 (backend)
 Equipo: Victor Manuel Jose Jose · Jesus Alejandro Gutierrez Montufar (10 IDGS-G3, UTTT)
 
 **API en producción (Azure):** `https://agropwa-api-cfcfcdbhdddqh7a7.centralus-01.azurewebsites.net`
@@ -71,22 +72,29 @@ Agro/
 │   │   ├── Dashboard/
 │   │   │   ├── Queries/ObtenerResumenDashboard/  handler                         (HU-12)
 │   │   │   └── Common/                           ResumenDashboardDto, GuiaDashboardDto, ActividadRecienteDto
+│   │   ├── Cultivos/
+│   │   │   ├── Commands/RegistrarCultivo/        command + handler + validador   (HU-14)
+│   │   │   ├── Queries/ObtenerMisCultivos/       query + handler + validador     (HU-15)
+│   │   │   ├── Queries/ObtenerDetalleCultivo/    handler                         (HU-16)
+│   │   │   └── Common/                           DTOs de tarjeta, detalle, avances y fotos
+│   │   ├── Catalogos/Queries/ObtenerTiposCultivo/  handler                       (HU-14)
 │   │   ├── Common/
 │   │   │   ├── Exceptions/                       Conflicto (409), NoEncontrado (404), NoAutorizado (401), DemasiadosIntentos (429)
 │   │   │   ├── Interfaces/                       IAgroDbContext, IAuthProcedimientos, IParcelasProcedimientos,
-│   │   │   │                                     IDashboardProcedimientos, IGeneradorJwt, IHashContrasena
+│   │   │   │                                     IDashboardProcedimientos, ICultivosProcedimientos,
+│   │   │   │                                     IGeneradorJwt, IHashContrasena
 │   │   │   └── Models/                           datos que viajan a los procedimientos
 │   │   ├── Salud/Queries/ComprobarSalud/         query + DTO de /api/salud
 │   │   └── DependencyInjection.cs                AddApplication()
 │   ├── Agro.Infrastructure/
 │   │   ├── Configuration/                        lectura del .env, cadena de conexión y ConfiguracionJwt
 │   │   ├── Persistence/                          AgroDbContext + verificación de conexión
-│   │   │   └── Procedimientos/                   ProcedimientosBase (métodos comunes) + Auth, Parcelas y Dashboard
+│   │   │   └── Procedimientos/                   ProcedimientosBase (métodos comunes) + Auth, Parcelas, Dashboard y Cultivos
 │   │   ├── Security/                             HashContrasenaBCrypt, GeneradorJwt
 │   │   └── DependencyInjection.cs                AddInfraestructure()
 │   └── Agro.Api/
 │       ├── Configuration/                        AutenticacionJwt, DocumentacionApi (Swagger)
-│       ├── Controllers/                          Salud, Auth, Parcelas y Dashboard
+│       ├── Controllers/                          Salud, Auth, Parcelas, Dashboard, Cultivos y Catalogos
 │       ├── Middleware/ManejadorExcepciones.cs
 │       ├── Program.cs
 │       └── .env.example
@@ -95,6 +103,7 @@ Agro/
     ├── Application/Auth/                         registro, login, sesión, validador + objetos falsos
     ├── Application/Parcelas/                     registrar, editar, consultar y reglas + falso en memoria
     ├── Application/Dashboard/                    resumen del dashboard + falso
+    ├── Application/Cultivos/                     registrar, consultar, detalle, FechaMexico + falso y RelojFijo
     └── Infrastructure/Security/                  BCrypt y JWT
 ```
 
@@ -216,6 +225,37 @@ Registrar y editar comparten las reglas con métodos de extensión de FluentVali
 - Un usuario sin datos recibe todo en `0`, la guía en `false` y la actividad vacía (criterio 3).
 - **Pendientes de sincronizar** no viene de la API: lo cuenta el frontend en IndexedDB.
 
+## Cultivos (HU-14, HU-15, HU-16)
+
+Todas las rutas llevan `[Authorize]` y el usuario sale del token.
+
+| Método y ruta | Respuestas |
+|---|---|
+| `GET /api/catalogos/tipos-cultivo` | **200** `[ { id, nombre } ]` (solo los activos) |
+| `POST /api/cultivos` | **201** cultivo nuevo · **200** si el `idLocal` ya existía (devuelve el mismo) · **400** |
+| `GET /api/cultivos?buscar=&estado=&idTipoCultivo=&pagina=1&tamano=20` | **200** `{ elementos: [...], total }` · **400** |
+| `GET /api/cultivos/{id}` | **200** `{ cultivo, avances, fotografias, totales }` · **404** «Cultivo no encontrado.» |
+
+```json
+{ "idLocal": "aaaaaaaa-1111-1111-1111-111111111111", "nombre": "Maíz criollo", "idTipoCultivo": 1,
+  "variedad": "Criollo", "fechaSiembra": "2026-06-12", "idParcela": 3, "observaciones": "Riego por goteo" }
+```
+
+| Regla | Dónde se cumple |
+|---|---|
+| Obligatorios: nombre (máx. 80), tipo, parcela y fecha de siembra · variedad ≤ 80 · observaciones ≤ 300 | `RegistrarCultivoValidator` |
+| La fecha de siembra **no puede ser posterior a hoy en México** («La fecha de siembra no puede ser posterior a hoy.») | `FechaMexico.Hoy(TimeProvider)` |
+| La parcela debe ser **del usuario** y el tipo debe existir → 400 en `idParcela` / `idTipoCultivo` | `sp_registrar_cultivo` lanza `P0002` con la columna; `CultivosProcedimientos` lo convierte en `ValidationException` |
+| Todo cultivo nuevo inicia **activo** | Valor por defecto de la tabla `cultivo` |
+| `idLocal` repetido → se devuelve el existente, sin duplicar | `sp_registrar_cultivo` → `p_ya_existia` |
+| Búsqueda por nombre del cultivo **o de la parcela**, sin mayúsculas **ni acentos** («maiz» = «Maíz») | `sp_obtener_cultivos` (`translate()`) |
+| Filtros por estado (`activo`, `finalizado`, `perdido`; vacío = todos) y por tipo; páginas de 1 a 50 | `ObtenerMisCultivosValidator` |
+| Orden del más reciente al más antiguo; `total` sin paginar para el paginador | `sp_obtener_cultivos` (`count(*) OVER ()`) |
+| Días de cultivo = hoy en México − fecha de siembra | Procedimientos de la migración 013 |
+| Detalle de un cultivo ajeno → **404**, igual que si no existiera (no revela que existe) | `ObtenerDetalleCultivoHandler` |
+
+**Fechas:** `fechaSiembra` y `fechaCosecha` son `DateOnly` (`"2026-06-12"`); `fechaActividad` y `fechaCaptura` van en UTC.
+
 ## Acceso a datos: solo procedimientos almacenados
 
 Por seguridad, la API **no hace consultas directas** a las tablas. Las clases de `Persistence/Procedimientos`
@@ -236,6 +276,12 @@ ejecutan procedimientos almacenados con parámetros tipados (`NpgsqlParameter`),
 | `sp_obtener_parcelas` | Parcelas activas con su número de cultivos (cursor) | 011 |
 | `sp_obtener_resumen_dashboard` | Totales y pasos de la guía (cursor) | 012 |
 | `sp_obtener_actividad_reciente` | Últimos avances: tipo, cultivo y fecha (cursor) | 012 |
+| `sp_obtener_tipos_cultivo` | Catálogo de tipos de cultivo activos (cursor) | 013 |
+| `sp_registrar_cultivo` | Registra el cultivo o devuelve el existente por `idLocal`; parcela ajena o tipo inválido → `P0002` | 013 |
+| `sp_obtener_cultivos` | Tarjetas con búsqueda, filtros, paginación y `total` (cursor) | 013 |
+| `sp_obtener_detalle_cultivo` | Datos del cultivo con sus totales; sin fila si no es del usuario (cursor) | 013 |
+| `sp_obtener_avances_cultivo` | Avances del cultivo con su número de fotos (cursor) | 013 |
+| `sp_obtener_fotografias_cultivo` | Galería del cultivo (cursor) | 013 |
 
 `ProcedimientosBase` tiene los métodos comunes que heredan `AuthProcedimientos`, `ParcelasProcedimientos` y
 `DashboardProcedimientos`:
@@ -286,12 +332,16 @@ dotnet test Agro/Agro.slnx --collect:"XPlat Code Coverage"
 | `Application/Parcelas/ParcelasHandlersTests` | Registrar (201/200 por `idLocal`, espacios, 409, 400), editar (200, 404 propio y ajeno, 409, 400) y consultar solo las propias |
 | `Application/Parcelas/ReglasParcelaTests` | Nombre, superficie (0, negativa, 3 decimales, máximo), ubicación, un solo mensaje por campo y `Normalizar` |
 | `Application/Dashboard/ObtenerResumenDashboardHandlerTests` | Usuario sin datos en 0, totales y guía, actividad con máximo 5, usuario inexistente (404) |
+| `Application/Cultivos/RegistrarCultivoTests` | Registro activo, `idLocal` repetido, espacios y opcionales en null, parcela ajena y tipo inválido (400), obligatorios, fecha futura, **«hoy» en México cuando en UTC ya es mañana**, largos |
+| `Application/Cultivos/ConsultarCultivosTests` | Catálogo, solo los cultivos propios y en orden, filtros normalizados y vacíos, parámetros inválidos, detalle con totales, cultivo ajeno o inexistente (404), `FechaMexico` |
 | `Infrastructure/Security/SeguridadTests` | BCrypt, contenido del JWT y refresh token (aleatorio + SHA-256) |
 
-**80 pruebas.** Ninguna usa base de datos: los archivos de falsos (`Falsos.cs`, `ParcelasFalsas.cs`,
-`DashboardProcedimientosFalsos.cs`) reemplazan los procedimientos almacenados, el JWT y el hash por objetos que
-devuelven lo que cada prueba necesita y guardan lo que reciben. `ParcelasFalsas.cs` aplica en memoria las mismas
-reglas que los procedimientos de la migración 011.
+**111 pruebas.** Ninguna usa base de datos: los archivos de falsos (`Falsos.cs`, `ParcelasFalsas.cs`,
+`DashboardProcedimientosFalsos.cs`, `CultivosFalsos.cs`) reemplazan los procedimientos almacenados, el JWT y el hash
+por objetos que devuelven lo que cada prueba necesita y guardan lo que reciben. `ParcelasFalsas.cs` y
+`CultivosFalsos.cs` aplican en memoria las mismas reglas que los procedimientos de las migraciones 011 y 013.
+`RelojFijo` (en `CultivosFalsos.cs`) es un `TimeProvider` con hora fija, para que las pruebas de fechas no dependan
+del día en que se ejecutan.
 
 ## Calidad de código · SonarQube Cloud (HU-29)
 
@@ -335,13 +385,16 @@ El scanner trabaja en tres fases: `begin` (se engancha al compilador) → `dotne
 
 ### Resultados
 
-| Métrica | Sprint 3 (inicial) | Sprint 3 (final) | Sprint 4 | Sprint 5 |
-|---|---|---|---|---|
-| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) | 0 | 0 |
-| Code smells | 3 | 0 | 0 | 0 |
-| Bugs | 0 | 0 | 0 | 0 |
-| Cobertura del código nuevo | — | — | **100 %** | **98 %** |
-| Quality Gate | — | **Passed** | **Passed** | **Passed** |
+| Métrica | Sprint 3 (inicial) | Sprint 3 (final) | Sprint 4 | Sprint 5 | Sprint 6 |
+|---|---|---|---|---|---|
+| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) | 0 | 0 | 0 |
+| Code smells | 3 | 0 | 0 | 0 | 0 |
+| Bugs | 0 | 0 | 0 | 0 | 0 |
+| Cobertura del código nuevo | — | — | **100 %** | **98 %** | **100 %** |
+| Quality Gate | — | **Passed** | **Passed** | **Passed** | **Passed** |
+
+En el Sprint 6 las pruebas encontraron un bug antes de llegar a producción: `?estado=` (vacío, el filtro «Todos»)
+respondía 400; el validador ahora trata el estado vacío como «sin filtro», igual que el handler.
 
 | Regla | Archivo | Corrección |
 |---|---|---|
@@ -500,6 +553,19 @@ Con una cuenta de prueba en producción, después de aplicar las migraciones 011
 | Dashboard después de registrar la parcela | `tieneParcela: true` |
 | Logout y luego usar el mismo token | 204 · 401 |
 
+### Verificación del despliegue (Sprint 6)
+
+Con dos cuentas de prueba en producción, después de aplicar la migración 013 en Azure:
+
+| Prueba | Resultado |
+|---|---|
+| Catálogo · rutas de cultivos sin token | 200 con 6 tipos · 401 |
+| `POST /api/cultivos` · otra vez con el mismo `idLocal` | 201 activo · 200 con el mismo `id` |
+| Fecha de siembra futura · parcela de otro usuario | 400 · 400 en `idParcela` |
+| Lista · búsqueda «maiz» y «norte» · `?estado=` vacío · estado inválido | 2 en orden · 1 y 2 · 200 · 400 |
+| Detalle del dueño · detalle pedido por otro usuario | 200 · 404 |
+| Dashboard y parcelas después de registrar 2 cultivos | `cultivosActivos: 2` · `numeroCultivos: 2` |
+
 > **Plan gratuito F1:** la app se suspende tras unos 20 minutos sin uso; la primera petición después
 > puede tardar de 10 a 30 segundos. Para no consumir crédito, el servidor PostgreSQL puede detenerse
 > desde el portal cuando no se use.
@@ -535,5 +601,8 @@ dotnet ef dbcontext scaffold "Name=ConnectionStrings:Agro" Npgsql.EntityFramewor
 - Las clases de procedimientos nuevas heredan de `ProcedimientosBase`; un procedimiento con varios `INOUT` se lee
   con `EjecutarFilaAsync`.
 - Si dos commands validan los mismos campos, las reglas van en un `Reglas…` compartido (como `ReglasParcela`).
+- Para fechas «de hoy» usar `FechaMexico.Hoy(TimeProvider)`, no `DateTime.Today` (Azure está en UTC).
+- Si un procedimiento necesita marcar un campo inválido, lanza `P0002` con `COLUMN` y la clase de procedimientos lo
+  convierte en `ValidationException` (como `sp_registrar_cultivo`).
 - **Orden del despliegue:** primero las migraciones en Azure (AgroPWA-BD) y después el merge del backend a `main`;
   si no, los endpoints nuevos responden 500 porque no encuentran sus procedimientos.
