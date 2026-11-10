@@ -13,6 +13,7 @@ HU-29 · Análisis estático de calidad de código · HU-31 · Documentación de
 HU-09 · Registro de usuario · HU-10 · Inicio de sesión · HU-11 · Cerrar sesión · Sprint 4 (backend)
 HU-12 · Dashboard principal · HU-13 · Registrar parcela · Sprint 5 (backend)
 HU-14 · Registrar cultivo · HU-15 · Consultar cultivos · HU-16 · Detalle del cultivo · Sprint 6 (backend)
+HU-17 · Editar cultivo · HU-18 · Eliminar cultivo · HU-28 · Formulario de contacto · Sprint 7 (backend)
 Equipo: Victor Manuel Jose Jose · Jesus Alejandro Gutierrez Montufar (10 IDGS-G3, UTTT)
 
 **API en producción (Azure):** `https://agropwa-api-cfcfcdbhdddqh7a7.centralus-01.azurewebsites.net`
@@ -74,14 +75,18 @@ Agro/
 │   │   │   └── Common/                           ResumenDashboardDto, GuiaDashboardDto, ActividadRecienteDto
 │   │   ├── Cultivos/
 │   │   │   ├── Commands/RegistrarCultivo/        command + handler + validador   (HU-14)
+│   │   │   ├── Commands/EditarCultivo/           command + handler + validador   (HU-17)
+│   │   │   ├── Commands/EliminarCultivo/         handler                         (HU-18)
 │   │   │   ├── Queries/ObtenerMisCultivos/       query + handler + validador     (HU-15)
 │   │   │   ├── Queries/ObtenerDetalleCultivo/    handler                         (HU-16)
-│   │   │   └── Common/                           DTOs de tarjeta, detalle, avances y fotos
+│   │   │   └── Common/                           DTOs de tarjeta, detalle, avances y fotos; ReglasCultivo
+│   │   ├── Contacto/Commands/EnviarMensajeContacto/  command + handler + validador (HU-28)
 │   │   ├── Catalogos/Queries/ObtenerTiposCultivo/  handler                       (HU-14)
 │   │   ├── Common/
 │   │   │   ├── Exceptions/                       Conflicto (409), NoEncontrado (404), NoAutorizado (401), DemasiadosIntentos (429)
 │   │   │   ├── Interfaces/                       IAgroDbContext, IAuthProcedimientos, IParcelasProcedimientos,
 │   │   │   │                                     IDashboardProcedimientos, ICultivosProcedimientos,
+│   │   │   │                                     IContactoProcedimientos,
 │   │   │   │                                     IGeneradorJwt, IHashContrasena
 │   │   │   └── Models/                           datos que viajan a los procedimientos
 │   │   ├── Salud/Queries/ComprobarSalud/         query + DTO de /api/salud
@@ -225,7 +230,7 @@ Registrar y editar comparten las reglas con métodos de extensión de FluentVali
 - Un usuario sin datos recibe todo en `0`, la guía en `false` y la actividad vacía (criterio 3).
 - **Pendientes de sincronizar** no viene de la API: lo cuenta el frontend en IndexedDB.
 
-## Cultivos (HU-14, HU-15, HU-16)
+## Cultivos (HU-14 a HU-18)
 
 Todas las rutas llevan `[Authorize]` y el usuario sale del token.
 
@@ -235,6 +240,8 @@ Todas las rutas llevan `[Authorize]` y el usuario sale del token.
 | `POST /api/cultivos` | **201** cultivo nuevo · **200** si el `idLocal` ya existía (devuelve el mismo) · **400** |
 | `GET /api/cultivos?buscar=&estado=&idTipoCultivo=&pagina=1&tamano=20` | **200** `{ elementos: [...], total }` · **400** |
 | `GET /api/cultivos/{id}` | **200** `{ cultivo, avances, fotografias, totales }` · **404** «Cultivo no encontrado.» |
+| `PUT /api/cultivos/{id}` | **200** cultivo actualizado (con `fechaActualizacion`) · **400** · **404** |
+| `DELETE /api/cultivos/{id}` | **204** eliminado con sus avances y fotografías · **404** |
 
 ```json
 { "idLocal": "aaaaaaaa-1111-1111-1111-111111111111", "nombre": "Maíz criollo", "idTipoCultivo": 1,
@@ -252,9 +259,41 @@ Todas las rutas llevan `[Authorize]` y el usuario sale del token.
 | Filtros por estado (`activo`, `finalizado`, `perdido`; vacío = todos) y por tipo; páginas de 1 a 50 | `ObtenerMisCultivosValidator` |
 | Orden del más reciente al más antiguo; `total` sin paginar para el paginador | `sp_obtener_cultivos` (`count(*) OVER ()`) |
 | Días de cultivo = hoy en México − fecha de siembra | Procedimientos de la migración 013 |
-| Detalle de un cultivo ajeno → **404**, igual que si no existiera (no revela que existe) | `ObtenerDetalleCultivoHandler` |
+| Detalle, edición o eliminación de un cultivo ajeno → **404**, igual que si no existiera (no revela que existe) | Handlers de detalle, editar y eliminar |
+| Editar aplica las mismas reglas que registrar (escritas una sola vez) | `ReglasCultivo` |
+| Estado obligatorio: `activo`, `finalizado` o `perdido`; si es «finalizado» se pide la fecha de cosecha, que no puede ser anterior a la siembra ni posterior a hoy | `EditarCultivoValidator` |
+| La fecha de cosecha solo se guarda en los cultivos finalizados | `sp_editar_cultivo` |
+| Cambio hecho sin conexión: si `fechaModificacion` es anterior a la última modificación guardada, se conserva y se devuelve la versión del servidor | `sp_editar_cultivo` |
+| Al eliminar se borran en cascada los avances y las fotografías | Llaves foráneas `ON DELETE CASCADE` |
 
-**Fechas:** `fechaSiembra` y `fechaCosecha` son `DateOnly` (`"2026-06-12"`); `fechaActividad` y `fechaCaptura` van en UTC.
+```json
+PUT /api/cultivos/7
+{ "nombre": "Maíz criollo", "idTipoCultivo": 1, "variedad": "Criollo", "fechaSiembra": "2026-06-12",
+  "idParcela": 3, "estado": "finalizado", "fechaCosecha": "2026-10-30", "observaciones": null,
+  "fechaModificacion": null }
+```
+
+**Fechas:** `fechaSiembra` y `fechaCosecha` son `DateOnly` (`"2026-06-12"`); `fechaActividad`, `fechaCaptura`,
+`fechaActualizacion` y `fechaModificacion` van en UTC.
+
+## Contacto (HU-28)
+
+Ruta **pública** (sin `[Authorize]`): la usa la sección «Contáctanos» de la página de inicio.
+
+| Método y ruta | Respuestas |
+|---|---|
+| `POST /api/contacto` | **201** mensaje guardado · **400** `errores` por campo · **429** «Ya enviaste varios mensajes. Intenta más tarde.» |
+
+```json
+{ "nombre": "Ana López", "correo": "ana@correo.com", "asunto": "Duda", "mensaje": "Quiero más información." }
+```
+
+| Regla | Dónde se cumple |
+|---|---|
+| Obligatorios: nombre (máx. 120), correo (máx. 150) y mensaje (máx. 1000) · asunto opcional (máx. 150) | `EnviarMensajeContactoValidator` |
+| Correo con punto después de la `@`, igual que el CHECK de la tabla (si no, la base lo rechazaría) | `EnviarMensajeContactoValidator` (`Matches`) |
+| Máximo 3 mensajes por hora desde el mismo correo (sin importar mayúsculas) → 429 | `sp_registrar_mensaje_contacto` |
+| Máximo 10 peticiones por minuto por IP, contra bots | Rate limiter (política `login`) |
 
 ## Acceso a datos: solo procedimientos almacenados
 
@@ -282,9 +321,12 @@ ejecutan procedimientos almacenados con parámetros tipados (`NpgsqlParameter`),
 | `sp_obtener_detalle_cultivo` | Datos del cultivo con sus totales; sin fila si no es del usuario (cursor) | 013 |
 | `sp_obtener_avances_cultivo` | Avances del cultivo con su número de fotos (cursor) | 013 |
 | `sp_obtener_fotografias_cultivo` | Galería del cultivo (cursor) | 013 |
+| `sp_editar_cultivo` | Edita un cultivo del usuario; `p_existe = false` → 404; conserva el cambio más reciente | 014 |
+| `sp_eliminar_cultivo` | Elimina el cultivo con sus avances y fotos; `false` → 404 | 014 |
+| `sp_registrar_mensaje_contacto` | Guarda el mensaje; `p_limite_excedido` → 429 | 014 |
 
-`ProcedimientosBase` tiene los métodos comunes que heredan `AuthProcedimientos`, `ParcelasProcedimientos` y
-`DashboardProcedimientos`:
+`ProcedimientosBase` tiene los métodos comunes que heredan `AuthProcedimientos`, `ParcelasProcedimientos`,
+`DashboardProcedimientos`, `CultivosProcedimientos` y `ContactoProcedimientos`:
 
 | Método | Para |
 |---|---|
@@ -305,8 +347,8 @@ Todos los errores son JSON (ProblemDetails) en español:
 | 401 | Sin token, token vencido o sesión cerrada · credenciales incorrectas | JwtBearer · `NoAutorizadoException` |
 | 404 | El recurso no existe o es de otro usuario | `NoEncontradoException` |
 | 409 | Dato repetido (correo, nombre de parcela) | `ConflictoException` |
-| 429 | Cuenta bloqueada o demasiadas peticiones al login | `DemasiadosIntentosException` · rate limiter |
-| 503 | Sin conexión con la base de datos | `ManejadorExcepciones` |
+| 429 | Cuenta bloqueada, demasiadas peticiones al login o más de 3 mensajes de contacto por hora | `DemasiadosIntentosException` · rate limiter |
+| 503 | Sin conexión con la base de datos (o cualquier otro error de base de datos, p. ej. un procedimiento que aún no existe) | `ManejadorExcepciones` |
 
 Los 400 incluyen los errores por campo: `{ "errores": { "superficieHa": ["Ingresa un número válido."] } }`.
 
@@ -334,10 +376,12 @@ dotnet test Agro/Agro.slnx --collect:"XPlat Code Coverage"
 | `Application/Dashboard/ObtenerResumenDashboardHandlerTests` | Usuario sin datos en 0, totales y guía, actividad con máximo 5, usuario inexistente (404) |
 | `Application/Cultivos/RegistrarCultivoTests` | Registro activo, `idLocal` repetido, espacios y opcionales en null, parcela ajena y tipo inválido (400), obligatorios, fecha futura, **«hoy» en México cuando en UTC ya es mañana**, largos |
 | `Application/Cultivos/ConsultarCultivosTests` | Catálogo, solo los cultivos propios y en orden, filtros normalizados y vacíos, parámetros inválidos, detalle con totales, cultivo ajeno o inexistente (404), `FechaMexico` |
+| `Application/Cultivos/EditarEliminarCultivoTests` | Editar (datos nuevos, estado y textos normalizados, cultivo ajeno 404, datos inválidos no llegan a la base), estados válidos e inválidos, finalizado sin cosecha, cosecha antes de la siembra o después de hoy, mismas reglas que registrar; eliminar propio y ajeno (404 sin borrar) |
+| `Application/Contacto/EnviarMensajeContactoTests` | Datos limpios (correo en minúsculas, asunto vacío en null), 4.º mensaje en una hora (429), inválidos no se guardan, obligatorios, correos inválidos (incluido sin punto), mensaje de 1000 y 1001 caracteres |
 | `Infrastructure/Security/SeguridadTests` | BCrypt, contenido del JWT y refresh token (aleatorio + SHA-256) |
 
-**111 pruebas.** Ninguna usa base de datos: los archivos de falsos (`Falsos.cs`, `ParcelasFalsas.cs`,
-`DashboardProcedimientosFalsos.cs`, `CultivosFalsos.cs`) reemplazan los procedimientos almacenados, el JWT y el hash
+**133 pruebas.** Ninguna usa base de datos: los archivos de falsos (`Falsos.cs`, `ParcelasFalsas.cs`,
+`DashboardProcedimientosFalsos.cs`, `CultivosFalsos.cs`, `ContactoFalsos.cs`) reemplazan los procedimientos almacenados, el JWT y el hash
 por objetos que devuelven lo que cada prueba necesita y guardan lo que reciben. `ParcelasFalsas.cs` y
 `CultivosFalsos.cs` aplican en memoria las mismas reglas que los procedimientos de las migraciones 011 y 013.
 `RelojFijo` (en `CultivosFalsos.cs`) es un `TimeProvider` con hora fija, para que las pruebas de fechas no dependan
@@ -385,16 +429,21 @@ El scanner trabaja en tres fases: `begin` (se engancha al compilador) → `dotne
 
 ### Resultados
 
-| Métrica | Sprint 3 (inicial) | Sprint 3 (final) | Sprint 4 | Sprint 5 | Sprint 6 |
-|---|---|---|---|---|---|
-| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) | 0 | 0 | 0 |
-| Code smells | 3 | 0 | 0 | 0 | 0 |
-| Bugs | 0 | 0 | 0 | 0 | 0 |
-| Cobertura del código nuevo | — | — | **100 %** | **98 %** | **100 %** |
-| Quality Gate | — | **Passed** | **Passed** | **Passed** | **Passed** |
+| Métrica | Sprint 3 (inicial) | Sprint 3 (final) | Sprint 4 | Sprint 5 | Sprint 6 | Sprint 7 |
+|---|---|---|---|---|---|---|
+| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) | 0 | 0 | 0 | 0 |
+| Code smells | 3 | 0 | 0 | 0 | 0 | 0 nuevos |
+| Bugs | 0 | 0 | 0 | 0 | 0 | 0 |
+| Cobertura del código nuevo | — | — | **100 %** | **98 %** | **100 %** | **95.7 %** |
+| Quality Gate | — | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** |
 
 En el Sprint 6 las pruebas encontraron un bug antes de llegar a producción: `?estado=` (vacío, el filtro «Todos»)
 respondía 400; el validador ahora trata el estado vacío como «sin filtro», igual que el handler.
+
+En el Sprint 7 (PR [#51](https://github.com/AlejandroGtz23/AgroPWA-Back/pull/51)) la duplicación del código nuevo
+quedó en **0 %**: las reglas de registrar y editar cultivo viven en `ReglasCultivo`. Las pruebas en Swagger
+encontraron un parámetro faltante al llamar a `sp_editar_cultivo` antes de llegar a producción (el 503 escondía el
+error real; el log de PostgreSQL lo mostró).
 
 | Regla | Archivo | Corrección |
 |---|---|---|
