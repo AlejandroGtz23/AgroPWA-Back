@@ -168,8 +168,4 @@ public sealed class CultivosProcedimientos(AgroDbContext db) : ProcedimientosBas
         }
     }
 
-
-    /// <summary>El procedimiento indica la columna (P0002): se responde 400 con el error en ese campo.</summary>
-    private static FluentValidation.ValidationException ErrorDeCampo(PostgresException ex) =>
-        new([new ValidationFailure(ex.ColumnName == "id_parcela" ? "idParcela" : "idTipoCultivo", ex.MessageText)]);
 }

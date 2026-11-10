@@ -3,6 +3,8 @@ using Agro.Application.Auth.Commands.IniciarSesion;
 using Agro.Application.Auth.Commands.RegistrarUsuario;
 using Agro.Application.Auth.Commands.RenovarSesion;
 using Agro.Application.Auth.Common;
+using Agro.Application.Avances.Commands.RegistrarAvance;
+using Agro.Application.Catalogos.Queries.ObtenerTiposActividad;
 using Agro.Application.Catalogos.Queries.ObtenerTiposCultivo;
 using Agro.Application.Contacto.Commands.EnviarMensajeContacto;
 using Agro.Application.Cultivos.Commands.EditarCultivo;
@@ -62,6 +64,9 @@ public static class DependencyInjection
 
         // Contacto
         services.AddScoped<EnviarMensajeContactoHandler>();
+
+        services.AddScoped<ObtenerTiposActividadHandler>();
+        services.AddScoped<RegistrarAvanceHandler>();
 
         return services;
     }
