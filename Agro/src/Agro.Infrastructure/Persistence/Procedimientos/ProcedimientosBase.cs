@@ -4,6 +4,7 @@ using NpgsqlTypes;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using FluentValidation.Results;
 
 namespace Agro.Infrastructure.Persistence.Procedimientos;
 
@@ -74,4 +75,16 @@ public abstract class ProcedimientosBase(AgroDbContext db)
     }
  protected static NpgsqlParameter Parametro(string nombre, NpgsqlDbType tipo, object? valor) =>
         new(nombre, tipo) { Value = valor ?? DBNull.Value };
+
+    /// <summary>El procedimiento indicó la columna del error (RAISE … COLUMN): 400 con el error en ese campo.</summary>
+    protected static FluentValidation.ValidationException ErrorDeCampo(PostgresException ex) =>
+        new([new ValidationFailure(ACamelCase(ex.ColumnName!), ex.MessageText)]);
+
+    /// <summary>id_tipo_actividad → idTipoActividad (como se llaman los campos en el JSON).</summary>
+    private static string ACamelCase(string columna)
+    {
+        var partes = columna.Split('_');
+        return partes[0] + string.Concat(partes.Skip(1).Select(p => char.ToUpperInvariant(p[0]) + p[1..]));
+    }
 }
+
