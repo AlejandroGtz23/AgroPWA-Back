@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddScoped<IDashboardProcedimientos, DashboardProcedimientos>();
         services.AddScoped<ICultivosProcedimientos, CultivosProcedimientos>();
         services.AddScoped<IContactoProcedimientos, ContactoProcedimientos>();
+        services.AddScoped<IAvancesProcedimientos, AvancesProcedimientos>();
         return services;
     }
 }
