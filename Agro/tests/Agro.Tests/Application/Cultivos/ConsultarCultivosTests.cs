@@ -6,6 +6,8 @@ using Agro.Application.Cultivos.Common;
 using Agro.Application.Cultivos.Queries.ObtenerDetalleCultivo;
 using Agro.Application.Cultivos.Queries.ObtenerMisCultivos;
 using FluentValidation;
+using Agro.Application.Fotografias.Common;
+using Agro.Tests.Application.Fotografias;
 
 namespace Agro.Tests.Application.Cultivos;
 
@@ -16,16 +18,17 @@ public class ConsultarCultivosTests
     private const int OtroUsuario = 2;
 
     private readonly CultivosProcedimientosFalsos _procedimientos = new();
+    private readonly EnlacesFotografias _enlaces = new(new AlmacenFotosFalso());
 
-    private ObtenerMisCultivosHandler MisCultivos() => new(_procedimientos, new ObtenerMisCultivosValidator());
-    private ObtenerDetalleCultivoHandler Detalle() => new(_procedimientos);
+    private ObtenerMisCultivosHandler MisCultivos() => new(_procedimientos, new ObtenerMisCultivosValidator(), _enlaces);
+    private ObtenerDetalleCultivoHandler Detalle() => new(_procedimientos, _enlaces);
 
     /// <summary>Registra un cultivo con el handler real, para que el falso tenga datos.</summary>
     private async Task<int> RegistrarAsync(int idUsuario, string nombre)
     {
         var parcela = idUsuario * 10;
         _procedimientos.AgregarParcela(parcela, idUsuario);
-        var handler = new RegistrarCultivoHandler(_procedimientos, new RegistrarCultivoValidator(TimeProvider.System));
+        var handler = new RegistrarCultivoHandler(_procedimientos, new RegistrarCultivoValidator(TimeProvider.System), _enlaces);
         var (cultivo, _) = await handler.EjecutarAsync(idUsuario,
             new RegistrarCultivoCommand(null, nombre, 1, null, new DateOnly(2026, 6, 12), parcela, null));
         return cultivo.Id;
@@ -156,6 +159,17 @@ public class ConsultarCultivosTests
     public async Task Un_cultivo_que_no_existe_responde_404()
     {
         await Assert.ThrowsAsync<NoEncontradoException>(() => Detalle().EjecutarAsync(999, Usuario));
+    }
+
+    [Fact]
+    public async Task El_detalle_devuelve_enlaces_temporales_de_las_fotos()
+    {
+        var id = await RegistrarAsync(Usuario, "Maíz");
+        _procedimientos.Fotografias.Add(new FotografiaDto(1, "usuario-1/cultivo-1/a.jpg", DateTime.UnixEpoch, true, null));
+
+        var detalle = await Detalle().EjecutarAsync(id, Usuario);
+
+        Assert.Equal("https://almacen.test/usuario-1/cultivo-1/a.jpg?sig=prueba", Assert.Single(detalle.Fotografias).Url);
     }
 
     // ----- Fecha de México -----

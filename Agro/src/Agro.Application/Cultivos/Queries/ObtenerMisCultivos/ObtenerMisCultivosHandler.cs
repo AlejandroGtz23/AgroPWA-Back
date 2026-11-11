@@ -2,12 +2,14 @@
 using Agro.Application.Common.Models;
 using Agro.Application.Cultivos.Common;
 using FluentValidation;
+using Agro.Application.Fotografias.Common;
 
 namespace Agro.Application.Cultivos.Queries.ObtenerMisCultivos;
 
 public sealed class ObtenerMisCultivosHandler(
     ICultivosProcedimientos procedimientos,
-    IValidator<ObtenerMisCultivosQuery> validador)
+    IValidator<ObtenerMisCultivosQuery> validador,
+    EnlacesFotografias enlaces)
 {
     public async Task<Pagina<CultivoResumenDto>> EjecutarAsync(int idUsuario, ObtenerMisCultivosQuery consulta,
         CancellationToken ct = default)
@@ -19,6 +21,6 @@ public sealed class ObtenerMisCultivosHandler(
             string.IsNullOrWhiteSpace(consulta.Estado) ? null : consulta.Estado.Trim().ToLowerInvariant(),
             consulta.IdTipoCultivo, consulta.Pagina, consulta.Tamano);
 
-        return await procedimientos.ObtenerAsync(idUsuario, filtro, ct);
+        return enlaces.ConEnlaces(await procedimientos.ObtenerAsync(idUsuario, filtro, ct));
     }
 }
