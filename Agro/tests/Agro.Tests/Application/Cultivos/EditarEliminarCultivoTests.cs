@@ -2,7 +2,10 @@
 using Agro.Application.Common.Models;
 using Agro.Application.Cultivos.Commands.EditarCultivo;
 using Agro.Application.Cultivos.Commands.EliminarCultivo;
+using Agro.Application.Cultivos.Common;
 using Agro.Application.Cultivos.Queries.ObtenerDetalleCultivo;
+using Agro.Application.Fotografias.Common;
+using Agro.Tests.Application.Fotografias;
 using FluentValidation;
 
 namespace Agro.Tests.Application.Cultivos;
@@ -20,11 +23,17 @@ public class EditarEliminarCultivoTests
 
     private readonly CultivosProcedimientosFalsos _procedimientos = new();
     private readonly EditarCultivoValidator _validador = new(Reloj);
+    private readonly AlmacenFotosFalso _almacen = new();
+    private readonly EnlacesFotografias _enlaces;
 
-    public EditarEliminarCultivoTests() => _procedimientos.AgregarParcela(MiParcela, Usuario);
+    public EditarEliminarCultivoTests()
+    {
+        _enlaces = new EnlacesFotografias(_almacen);
+        _procedimientos.AgregarParcela(MiParcela, Usuario);
+    }
 
-    private EditarCultivoHandler Editar() => new(_procedimientos, _validador);
-    private EliminarCultivoHandler Eliminar() => new(_procedimientos);
+    private EditarCultivoHandler Editar() => new(_procedimientos, _validador, _enlaces);
+    private EliminarCultivoHandler Eliminar() => new(_procedimientos, _almacen);
 
     /// <summary>Registra un cultivo del usuario en el falso y devuelve su id.</summary>
     private async Task<int> CrearCultivoAsync() =>
@@ -154,5 +163,15 @@ public class EditarEliminarCultivoTests
 
         Assert.Equal(ObtenerDetalleCultivoHandler.NoEncontrado, error.Message);
         Assert.NotNull(await _procedimientos.ObtenerDetalleAsync(id, Usuario));
+    }
+    [Fact]
+    public async Task Eliminar_un_cultivo_borra_los_archivos_de_sus_fotos()
+    {
+        var id = await CrearCultivoAsync();
+        _procedimientos.Fotografias.Add(new FotografiaDto(1, "usuario-1/cultivo-1/a.jpg", DateTime.UnixEpoch, true, null));
+
+        await Eliminar().EjecutarAsync(id, Usuario);
+
+        Assert.Equal(["usuario-1/cultivo-1/a.jpg"], _almacen.Eliminadas);
     }
 }

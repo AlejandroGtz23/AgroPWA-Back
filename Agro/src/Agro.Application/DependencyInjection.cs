@@ -13,6 +13,9 @@ using Agro.Application.Cultivos.Commands.RegistrarCultivo;
 using Agro.Application.Cultivos.Queries.ObtenerDetalleCultivo;
 using Agro.Application.Cultivos.Queries.ObtenerMisCultivos;
 using Agro.Application.Dashboard.Queries.ObtenerResumenDashboard;
+using Agro.Application.Fotografias.Commands.EliminarFotografia;
+using Agro.Application.Fotografias.Commands.SubirFotografia;
+using Agro.Application.Fotografias.Common;
 using Agro.Application.Parcelas.Commands.EditarParcela;
 using Agro.Application.Parcelas.Commands.RegistrarParcela;
 using Agro.Application.Parcelas.Queries.ObtenerMisParcelas;
@@ -65,8 +68,14 @@ public static class DependencyInjection
         // Contacto
         services.AddScoped<EnviarMensajeContactoHandler>();
 
+        // Avances
         services.AddScoped<ObtenerTiposActividadHandler>();
         services.AddScoped<RegistrarAvanceHandler>();
+
+        // Fotografías
+        services.AddScoped<EnlacesFotografias>();
+        services.AddScoped<SubirFotografiaHandler>();
+        services.AddScoped<EliminarFotografiaHandler>();
 
         return services;
     }

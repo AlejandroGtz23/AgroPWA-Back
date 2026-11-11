@@ -2,12 +2,13 @@
 using Agro.Application.Common.Models;
 using Agro.Application.Cultivos.Common;
 using FluentValidation;
+using Agro.Application.Fotografias.Common;
 
 namespace Agro.Application.Cultivos.Commands.RegistrarCultivo;
 
 public sealed class RegistrarCultivoHandler(
     ICultivosProcedimientos procedimientos,
-    IValidator<RegistrarCultivoCommand> validador)
+    IValidator<RegistrarCultivoCommand> validador, EnlacesFotografias enlaces)
 {
     public async Task<(CultivoDto Cultivo, bool Creado)> EjecutarAsync(int idUsuario,
         RegistrarCultivoCommand comando, CancellationToken ct = default)
@@ -24,6 +25,6 @@ public sealed class RegistrarCultivoHandler(
         var registro = await procedimientos.RegistrarAsync(idUsuario, comando.IdLocal, datos, ct);
 
         var detalle = await procedimientos.ObtenerDetalleAsync(registro.IdCultivo, idUsuario, ct);
-        return (detalle!.Cultivo, !registro.YaExistia);
+        return (enlaces.ConEnlaces(detalle!.Cultivo), !registro.YaExistia);
     }
 }
