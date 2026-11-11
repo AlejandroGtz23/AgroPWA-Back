@@ -3,6 +3,8 @@ using Agro.Infrastructure.Configuration;
 using Agro.Infrastructure.Persistence;
 using Agro.Infrastructure.Persistence.Procedimientos;
 using Agro.Infrastructure.Security;
+using Agro.Infrastructure.Storage;
+using Azure.Storage.Blobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -11,7 +13,8 @@ namespace Agro.Infrastructure;
 /// <summary>Registra todo lo de Infrastructure con una sola línea en Program.cs.</summary>
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfraestructure(this IServiceCollection services, string cadenaConexion, ConfiguracionJwt configuracionJwt)
+    public static IServiceCollection AddInfraestructure(this IServiceCollection services, string cadenaConexion, 
+        ConfiguracionJwt configuracionJwt, ConfiguracionAlmacen configuracionAlmacen)
     {
         // Base de datos 
         services.AddDbContext<AgroDbContext>(opciones => opciones.UseNpgsql(cadenaConexion));
@@ -26,6 +29,12 @@ public static class DependencyInjection
         services.AddScoped<ICultivosProcedimientos, CultivosProcedimientos>();
         services.AddScoped<IContactoProcedimientos, ContactoProcedimientos>();
         services.AddScoped<IAvancesProcedimientos, AvancesProcedimientos>();
+
+        // Almacenamiento de fotos
+        services.AddSingleton(new BlobContainerClient(configuracionAlmacen.Conexion, configuracionAlmacen.Contenedor));
+        services.AddSingleton<IAlmacenFotos, AlmacenFotosAzure>();
+        services.AddScoped<IFotografiasProcedimientos, FotografiasProcedimientos>();
+
         return services;
     }
 }
