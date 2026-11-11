@@ -4,6 +4,7 @@ using Agro.Application.Common.Models;
 using Agro.Application.Cultivos.Common;
 using Agro.Application.Cultivos.Queries.ObtenerDetalleCultivo;
 using FluentValidation;
+using Agro.Application.Fotografias.Common;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -11,7 +12,7 @@ using System.Text;
 namespace Agro.Application.Cultivos.Commands.EditarCultivo;
 
 public sealed class EditarCultivoHandler(ICultivosProcedimientos procedimientos,
-    IValidator<EditarCultivoCommand> validador)
+    IValidator<EditarCultivoCommand> validador, EnlacesFotografias enlaces)
 {
     public async Task<CultivoDto> EjecutarAsync(int idCultivo, int idUsuario,
         EditarCultivoCommand comando, CancellationToken ct = default)
@@ -32,6 +33,6 @@ public sealed class EditarCultivoHandler(ICultivosProcedimientos procedimientos,
             throw new NoEncontradoException(ObtenerDetalleCultivoHandler.NoEncontrado);   // 404
 
         // Si el cambio era más viejo que el guardado, se devuelve la versión del servidor
-        return (await procedimientos.ObtenerDetalleAsync(idCultivo, idUsuario, ct))!.Cultivo;
+        return enlaces.ConEnlaces((await procedimientos.ObtenerDetalleAsync(idCultivo, idUsuario, ct))!.Cultivo);
     }
 }

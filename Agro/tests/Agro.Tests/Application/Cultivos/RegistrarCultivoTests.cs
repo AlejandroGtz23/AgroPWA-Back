@@ -1,5 +1,7 @@
 using Agro.Application.Cultivos.Commands.RegistrarCultivo;
 using FluentValidation;
+using Agro.Application.Fotografias.Common;
+using Agro.Tests.Application.Fotografias;
 
 namespace Agro.Tests.Application.Cultivos;
 
@@ -17,6 +19,7 @@ public class RegistrarCultivoTests
 
     private readonly CultivosProcedimientosFalsos _procedimientos = new();
     private readonly RegistrarCultivoValidator _validador = new(Reloj);
+    private readonly EnlacesFotografias _enlaces = new(new AlmacenFotosFalso());
 
     public RegistrarCultivoTests()
     {
@@ -24,7 +27,7 @@ public class RegistrarCultivoTests
         _procedimientos.AgregarParcela(ParcelaAjena, OtroUsuario);
     }
 
-    private RegistrarCultivoHandler Handler() => new(_procedimientos, _validador);
+    private RegistrarCultivoHandler Handler() => new(_procedimientos, _validador, _enlaces);
 
     private static RegistrarCultivoCommand Comando(
         string nombre = "Maíz criollo", int? idTipo = 1, int? idParcela = MiParcela,

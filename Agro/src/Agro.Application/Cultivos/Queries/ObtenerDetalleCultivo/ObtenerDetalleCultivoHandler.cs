@@ -1,13 +1,12 @@
 ﻿using Agro.Application.Common.Exceptions;
 using Agro.Application.Common.Interfaces;
 using Agro.Application.Cultivos.Common;
-using System;
-using System.Collections.Generic;
-using System.Text;
+using Agro.Application.Fotografias.Common;
+
 
 namespace Agro.Application.Cultivos.Queries.ObtenerDetalleCultivo;
 
-public sealed class ObtenerDetalleCultivoHandler(ICultivosProcedimientos procedimientos)
+public sealed class ObtenerDetalleCultivoHandler(ICultivosProcedimientos procedimientos, EnlacesFotografias enlaces)
 {
     public const string NoEncontrado = "Cultivo no encontrado.";
     public async Task<DetalleCultivoDto> EjecutarAsync(int idCultivo, int idUsuario, CancellationToken ct = default)
@@ -17,6 +16,8 @@ public sealed class ObtenerDetalleCultivoHandler(ICultivosProcedimientos procedi
         var avances = await procedimientos.ObtenerAvancesAsync(idCultivo, idUsuario, ct);      // más reciente primero
         var fotografias = await procedimientos.ObtenerFotografiasAsync(idCultivo, idUsuario, ct);
 
-        return new DetalleCultivoDto(datos.Cultivo, avances, fotografias, new TotalesCultivoDto(datos.TotalAvances, datos.TotalFotografias));
+        return new DetalleCultivoDto(enlaces.ConEnlaces(datos.Cultivo), avances,
+            [.. fotografias.Select(enlaces.ConEnlace)],                                           // ←
+            new TotalesCultivoDto(datos.TotalAvances, datos.TotalFotografias));
     }
 }
