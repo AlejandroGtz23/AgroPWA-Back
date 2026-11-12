@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.AddSingleton(new BlobContainerClient(configuracionAlmacen.Conexion, configuracionAlmacen.Contenedor));
         services.AddSingleton<IAlmacenFotos, AlmacenFotosAzure>();
         services.AddScoped<IFotografiasProcedimientos, FotografiasProcedimientos>();
+        services.AddScoped<ISincronizacionProcedimientos, SincronizacionProcedimientos>();
 
         return services;
     }
