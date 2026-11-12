@@ -14,6 +14,7 @@ HU-09 · Registro de usuario · HU-10 · Inicio de sesión · HU-11 · Cerrar se
 HU-12 · Dashboard principal · HU-13 · Registrar parcela · Sprint 5 (backend)
 HU-14 · Registrar cultivo · HU-15 · Consultar cultivos · HU-16 · Detalle del cultivo · Sprint 6 (backend)
 HU-17 · Editar cultivo · HU-18 · Eliminar cultivo · HU-28 · Formulario de contacto · Sprint 7 (backend)
+HU-19 · Registrar avance · HU-20 · Fotografías · Sprint 8 (backend)
 Equipo: Victor Manuel Jose Jose · Jesus Alejandro Gutierrez Montufar (10 IDGS-G3, UTTT)
 
 **API en producción (Azure):** `https://agropwa-api-cfcfcdbhdddqh7a7.centralus-01.azurewebsites.net`
@@ -81,20 +82,31 @@ Agro/
 │   │   │   ├── Queries/ObtenerDetalleCultivo/    handler                         (HU-16)
 │   │   │   └── Common/                           DTOs de tarjeta, detalle, avances y fotos; ReglasCultivo
 │   │   ├── Contacto/Commands/EnviarMensajeContacto/  command + handler + validador (HU-28)
+│   │   ├── Avances/
+│   │   │   ├── Commands/RegistrarAvance/         command + handler + validador   (HU-19)
+│   │   │   └── Common/                           AvanceDto, TipoActividadDto
+│   │   ├── Catalogos/Queries/ObtenerTiposActividad/  handler                     (HU-19)
+│   │   ├── Fotografias/
+│   │   │   ├── Commands/SubirFotografia/         command + handler + validador   (HU-20)
+│   │   │   ├── Commands/EliminarFotografia/      handler                         (HU-20)
+│   │   │   └── Common/                           TipoImagen (firma JPG/PNG), EnlacesFotografias (ruta → enlace)
 │   │   ├── Catalogos/Queries/ObtenerTiposCultivo/  handler                       (HU-14)
 │   │   ├── Common/
 │   │   │   ├── Exceptions/                       Conflicto (409), NoEncontrado (404), NoAutorizado (401), DemasiadosIntentos (429)
 │   │   │   ├── Interfaces/                       IAgroDbContext, IAuthProcedimientos, IParcelasProcedimientos,
 │   │   │   │                                     IDashboardProcedimientos, ICultivosProcedimientos,
-│   │   │   │                                     IContactoProcedimientos,
+│   │   │   │                                     IContactoProcedimientos, IAvancesProcedimientos,
+│   │   │   │                                     IFotografiasProcedimientos, IAlmacenFotos,
 │   │   │   │                                     IGeneradorJwt, IHashContrasena
 │   │   │   └── Models/                           datos que viajan a los procedimientos
 │   │   ├── Salud/Queries/ComprobarSalud/         query + DTO de /api/salud
 │   │   └── DependencyInjection.cs                AddApplication()
 │   ├── Agro.Infrastructure/
-│   │   ├── Configuration/                        lectura del .env, cadena de conexión y ConfiguracionJwt
+│   │   ├── Configuration/                        lectura del .env, cadena de conexión, ConfiguracionJwt y ConfiguracionAlmacen
 │   │   ├── Persistence/                          AgroDbContext + verificación de conexión
-│   │   │   └── Procedimientos/                   ProcedimientosBase (métodos comunes) + Auth, Parcelas, Dashboard y Cultivos
+│   │   │   └── Procedimientos/                   ProcedimientosBase (métodos comunes) + Auth, Parcelas, Dashboard, Cultivos,
+│   │   │                                         Contacto, Avances y Fotografias
+│   │   ├── Storage/                              AlmacenFotosAzure (Azure Blob Storage y enlaces SAS)
 │   │   ├── Security/                             HashContrasenaBCrypt, GeneradorJwt
 │   │   └── DependencyInjection.cs                AddInfraestructure()
 │   └── Agro.Api/
@@ -119,6 +131,11 @@ Agro/
    ```bash
    docker start mi_postgres
    ```
+   Para las fotos se usa **Azurite**, el emulador oficial de Azure Storage (la primera vez con `docker run`,
+   después con `docker start mi_azurite`):
+   ```bash
+   docker run -d --name mi_azurite -p 10000:10000 mcr.microsoft.com/azure-storage/azurite azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
+   ```
 2. Copia `Agro/src/Agro.Api/.env.example` como `Agro/src/Agro.Api/.env` y escribe tus datos:
 
    | Variable | Ejemplo | Descripción |
@@ -134,6 +151,8 @@ Agro/
    | `JWT_EMISOR` | `agro-api` | Quién emite el token (`iss`) |
    | `JWT_AUDIENCIA` | `agro-pwa` | Para quién es el token (`aud`) |
    | `JWT_MINUTOS` | `20` | Duración del access token |
+   | `STORAGE_CONEXION` | `UseDevelopmentStorage=true` | Almacenamiento de fotos: en local, Azurite (cadena pública fija); en Azure, la cadena de conexión de la cuenta (**secreta**) |
+   | `STORAGE_CONTENEDOR` | `fotografias` | Contenedor privado de las fotos |
 
    > En el `.env` solo debe estar activa **una** configuración (local o Azure); la otra, comentada con `#`.
 
@@ -295,6 +314,46 @@ Ruta **pública** (sin `[Authorize]`): la usa la sección «Contáctanos» de la
 | Máximo 3 mensajes por hora desde el mismo correo (sin importar mayúsculas) → 429 | `sp_registrar_mensaje_contacto` |
 | Máximo 10 peticiones por minuto por IP, contra bots | Rate limiter (política `login`) |
 
+## Avances (HU-19)
+
+| Método y ruta | Respuestas |
+|---|---|
+| `GET /api/catalogos/tipos-actividad` | **200** `[ { id, nombre } ]` (Riego, Fertilización, Avance, Plaga o enfermedad, Otra) |
+| `POST /api/cultivos/{idCultivo}/avances` | **201** el avance · **200** si el `idLocal` ya existía · **400** · **404** cultivo inexistente o ajeno · **409** cultivo no activo |
+
+```json
+{ "idLocal": null, "idTipoActividad": 1, "fechaActividad": "2026-11-09T14:30:00Z", "descripcion": "Riego de la mañana",
+  "duracionMin": 40, "metodoRiego": "Goteo", "producto": null, "cantidad": null, "unidad": null }
+```
+
+| Regla | Dónde se cumple |
+|---|---|
+| Tipo, fecha y descripción obligatorios (máx. 500) · fecha no futura (5 min de tolerancia) · duración y cantidad > 0 · cantidad con máx. 2 decimales | `RegistrarAvanceValidator` |
+| Solo en cultivos **activos** del usuario | `sp_registrar_avance` → 404 / 409 |
+| La fecha no puede ser anterior a la siembra (día en hora de México) | `sp_registrar_avance` → 400 en `fechaActividad` |
+| Riego: duración y método · Fertilización: producto, cantidad y unidad (por el **nombre** del tipo) | `sp_registrar_avance` → 400 en ese campo |
+| Los campos que no aplican al tipo se guardan vacíos | `sp_registrar_avance` |
+
+## Fotografías (HU-20)
+
+Las fotos se guardan en **Azure Blob Storage**, en un contenedor **privado** (`fotografias`). La BD guarda solo la
+**ruta** (`usuario-3/cultivo-12/7f3a….jpg`) y la API responde con **enlaces temporales (SAS) que vencen en 1 hora**:
+nadie puede ver una foto sin pasar por la API. En local se usa Azurite con el mismo código.
+
+| Método y ruta | Respuestas |
+|---|---|
+| `POST /api/cultivos/{idCultivo}/fotografias` (multipart: `archivo`, `idAvance?`, `esPortada`, `idLocal?`, `latitud?`, `longitud?`) | **201** `{ id, url, nombreArchivo, tamanoKb, esPortada, … }` · **200** mismo `idLocal` · **400** · **404** · **409** |
+| `DELETE /api/fotografias/{id}` | **204** (borra el registro y el archivo) · **404** «Fotografía no encontrada.» |
+
+| Regla | Dónde se cumple |
+|---|---|
+| Solo JPG o PNG de hasta 5 MB; el tipo se reconoce por los **primeros bytes**, no por la extensión | `SubirFotografiaValidator` y `TipoImagen` |
+| Nombre del archivo generado por el servidor (GUID) | `SubirFotografiaHandler` |
+| Máximo 5 fotos por avance (409) · el avance debe ser del mismo cultivo (400) · una sola portada por cultivo | `sp_registrar_fotografia` e índice `ux_fotografia_portada` |
+| Si la BD rechaza la foto, se borra el archivo recién subido (no quedan archivos sueltos) | `SubirFotografiaHandler` |
+| Al eliminar un cultivo se borran también los archivos de sus fotos | `EliminarCultivoHandler` |
+| `portadaUrl` y la galería del detalle se devuelven como enlaces temporales | `EnlacesFotografias` |
+
 ## Acceso a datos: solo procedimientos almacenados
 
 Por seguridad, la API **no hace consultas directas** a las tablas. Las clases de `Persistence/Procedimientos`
@@ -324,9 +383,17 @@ ejecutan procedimientos almacenados con parámetros tipados (`NpgsqlParameter`),
 | `sp_editar_cultivo` | Edita un cultivo del usuario; `p_existe = false` → 404; conserva el cambio más reciente | 014 |
 | `sp_eliminar_cultivo` | Elimina el cultivo con sus avances y fotos; `false` → 404 | 014 |
 | `sp_registrar_mensaje_contacto` | Guarda el mensaje; `p_limite_excedido` → 429 | 014 |
+| `sp_obtener_tipos_actividad` | Catálogo de tipos de actividad (cursor) | 015 |
+| `sp_registrar_avance` | Registra el avance; 404 / 409 / 400 por columna | 015 |
+| `sp_obtener_avance` | El avance con el nombre de su tipo (cursor) | 015 |
+| `sp_registrar_fotografia` | Registra la foto ya subida; portada única, máx. 5 por avance | 016 |
+| `sp_obtener_fotografia` | La foto del usuario (cursor) | 016 |
+| `sp_eliminar_fotografia` | Borra la foto y devuelve su ruta para borrar el archivo | 016 |
 
 `ProcedimientosBase` tiene los métodos comunes que heredan `AuthProcedimientos`, `ParcelasProcedimientos`,
-`DashboardProcedimientos`, `CultivosProcedimientos` y `ContactoProcedimientos`:
+`DashboardProcedimientos`, `CultivosProcedimientos`, `ContactoProcedimientos`, `AvancesProcedimientos` y
+`FotografiasProcedimientos`. `ErrorDeCampo` convierte la columna que indica el procedimiento (`RAISE … COLUMN`)
+en el nombre del campo del JSON (`duracion_min` → `duracionMin`):
 
 | Método | Para |
 |---|---|
@@ -378,10 +445,13 @@ dotnet test Agro/Agro.slnx --collect:"XPlat Code Coverage"
 | `Application/Cultivos/ConsultarCultivosTests` | Catálogo, solo los cultivos propios y en orden, filtros normalizados y vacíos, parámetros inválidos, detalle con totales, cultivo ajeno o inexistente (404), `FechaMexico` |
 | `Application/Cultivos/EditarEliminarCultivoTests` | Editar (datos nuevos, estado y textos normalizados, cultivo ajeno 404, datos inválidos no llegan a la base), estados válidos e inválidos, finalizado sin cosecha, cosecha antes de la siembra o después de hoy, mismas reglas que registrar; eliminar propio y ajeno (404 sin borrar) |
 | `Application/Contacto/EnviarMensajeContactoTests` | Datos limpios (correo en minúsculas, asunto vacío en null), 4.º mensaje en una hora (429), inválidos no se guardan, obligatorios, correos inválidos (incluido sin punto), mensaje de 1000 y 1001 caracteres |
+| `Application/Avances/RegistrarAvanceTests` | Registro, `idLocal` repetido, textos limpios, cultivo ajeno (404) y finalizado (409), tipo inválido (400), catálogo, obligatorios, duración 0 o negativa, fecha futura con tolerancia, cantidad y decimales, descripción de 500 |
+| `Application/Fotografias/FotografiasTests` | PNG y JPG por su firma, archivo que no es imagen, vacío o de más de 5 MB, la BD falla y se borra el archivo, `idLocal` repetido borra la copia, coordenadas, eliminar propia y ajena |
 | `Infrastructure/Security/SeguridadTests` | BCrypt, contenido del JWT y refresh token (aleatorio + SHA-256) |
 
-**133 pruebas.** Ninguna usa base de datos: los archivos de falsos (`Falsos.cs`, `ParcelasFalsas.cs`,
-`DashboardProcedimientosFalsos.cs`, `CultivosFalsos.cs`, `ContactoFalsos.cs`) reemplazan los procedimientos almacenados, el JWT y el hash
+**161 pruebas.** Ninguna usa base de datos: los archivos de falsos (`Falsos.cs`, `ParcelasFalsas.cs`,
+`DashboardProcedimientosFalsos.cs`, `CultivosFalsos.cs`, `ContactoFalsos.cs`, `AvancesFalsos.cs`, `FotografiasFalsas.cs` y
+`AlmacenFotosFalso.cs`) reemplazan los procedimientos almacenados, el JWT y el hash
 por objetos que devuelven lo que cada prueba necesita y guardan lo que reciben. `ParcelasFalsas.cs` y
 `CultivosFalsos.cs` aplican en memoria las mismas reglas que los procedimientos de las migraciones 011 y 013.
 `RelojFijo` (en `CultivosFalsos.cs`) es un `TimeProvider` con hora fija, para que las pruebas de fechas no dependan
@@ -406,7 +476,7 @@ El **Quality Gate** decide si el código cumple el estándar y su resultado apar
 | Rama principal en Sonar | `develop` (el plan Free solo muestra el detalle completo de la rama principal) |
 | Cobertura | `coverlet.collector` en formato OpenCover (`coverage.opencover.xml`) |
 | Quality Gate | Código nuevo: calificación A en confiabilidad, seguridad y mantenibilidad · **cobertura ≥ 80 %** · duplicación ≤ 3 % · hotspots revisados |
-| Exclusiones de cobertura | `Agro.Api/**`, `Infrastructure/Persistence/**`, `Infrastructure/Configuration/**`, `DependencyInjection.cs` y `Domain/Entities/**` |
+| Exclusiones de cobertura | `Agro.Api/**`, `Infrastructure/Persistence/**`, `Infrastructure/Storage/**`, `Infrastructure/Configuration/**`, `DependencyInjection.cs` y `Domain/Entities/**` |
 
 Las exclusiones solo quitan esos archivos del **cálculo de cobertura**: necesitan la base real o el servidor web
 para ejecutarse (se prueban con Swagger y en Azure). Sonar sigue revisándolos en busca de bugs y vulnerabilidades.
@@ -429,13 +499,13 @@ El scanner trabaja en tres fases: `begin` (se engancha al compilador) → `dotne
 
 ### Resultados
 
-| Métrica | Sprint 3 (inicial) | Sprint 3 (final) | Sprint 4 | Sprint 5 | Sprint 6 | Sprint 7 |
-|---|---|---|---|---|---|---|
-| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) | 0 | 0 | 0 | 0 |
-| Code smells | 3 | 0 | 0 | 0 | 0 | 0 nuevos |
-| Bugs | 0 | 0 | 0 | 0 | 0 | 0 |
-| Cobertura del código nuevo | — | — | **100 %** | **98 %** | **100 %** | **95.7 %** |
-| Quality Gate | — | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** |
+| Métrica | Sprint 3 (inicial) | Sprint 3 (final) | Sprint 4 | Sprint 5 | Sprint 6 | Sprint 7 | Sprint 8 |
+|---|---|---|---|---|---|---|---|
+| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) | 0 | 0 | 0 | 0 | 0 |
+| Code smells | 3 | 0 | 0 | 0 | 0 | 0 nuevos | 0 nuevos |
+| Bugs | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Cobertura del código nuevo | — | — | **100 %** | **98 %** | **100 %** | **95.7 %** | **99.0 %** |
+| Quality Gate | — | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** |
 
 En el Sprint 6 las pruebas encontraron un bug antes de llegar a producción: `?estado=` (vacío, el filtro «Todos»)
 respondía 400; el validador ahora trata el estado vacío como «sin filtro», igual que el handler.
@@ -444,6 +514,10 @@ En el Sprint 7 (PR [#51](https://github.com/AlejandroGtz23/AgroPWA-Back/pull/51)
 quedó en **0 %**: las reglas de registrar y editar cultivo viven en `ReglasCultivo`. Las pruebas en Swagger
 encontraron un parámetro faltante al llamar a `sp_editar_cultivo` antes de llegar a producción (el 503 escondía el
 error real; el log de PostgreSQL lo mostró).
+
+En el Sprint 8 (PR [#59](https://github.com/AlejandroGtz23/AgroPWA-Back/pull/59)) se excluyó de la cobertura
+`Infrastructure/Storage/**`, igual que `Persistence`: habla con un servicio real (Azure) y se prueba en Swagger.
+`dotnet test` **no compila `Agro.Api`** (ninguna prueba lo usa): para revisar todo, usar también `dotnet build`.
 
 | Regla | Archivo | Corrección |
 |---|---|---|
@@ -517,6 +591,7 @@ Azure · grupo de recursos rg-agropwa-dev                               ▼
 | `plan-agropwa` | Plan de App Service | Central US | F1 Gratis |
 | `agropwa-db-2` | Azure Database for PostgreSQL Flexible Server 16 | Central US | Burstable B1ms, 32 GB |
 | `agropwa-front` | Azure Static Web Apps (frontend, HU-05) | Global | — |
+| Cuenta de almacenamiento | Azure Blob Storage, contenedor privado `fotografias` (HU-20) | Central US | Estándar LRS |
 
 La API y la base de datos están en la **misma región** para reducir la latencia y evitar costos de
 transferencia entre regiones.
@@ -548,6 +623,8 @@ En Azure no hay archivo `.env`: la configuración está en **agropwa-api → Con
 | `JWT_AUDIENCIA` | `agro-pwa` |
 | `JWT_MINUTOS` | `20` |
 | `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | `true` (el límite de peticiones usa la IP real del cliente detrás del proxy de Azure) |
+| `STORAGE_CONEXION` | Cadena de conexión de la cuenta de almacenamiento (**secreta**, solo en Azure). Sin ella la API no arranca |
+| `STORAGE_CONTENEDOR` | `fotografias` |
 
 ### Integración y despliegue continuo (GitHub Actions)
 
