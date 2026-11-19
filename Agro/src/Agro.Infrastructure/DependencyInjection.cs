@@ -36,6 +36,8 @@ public static class DependencyInjection
         services.AddScoped<IFotografiasProcedimientos, FotografiasProcedimientos>();
         services.AddScoped<ISincronizacionProcedimientos, SincronizacionProcedimientos>();
 
+        services.AddScoped<IPerfilProcedimientos, PerfilProcedimientos>();
+
         return services;
     }
 }

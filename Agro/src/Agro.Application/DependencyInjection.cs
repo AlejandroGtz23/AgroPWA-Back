@@ -19,6 +19,8 @@ using Agro.Application.Fotografias.Common;
 using Agro.Application.Parcelas.Commands.EditarParcela;
 using Agro.Application.Parcelas.Commands.RegistrarParcela;
 using Agro.Application.Parcelas.Queries.ObtenerMisParcelas;
+using Agro.Application.Perfil.Commands.ActualizarPerfil;
+using Agro.Application.Perfil.Commands.CambiarContrasena;
 using Agro.Application.Salud.Queries.ComprobarSalud;
 using Agro.Application.Sincronizacion.Commands.ActualizarPreferencias;
 using Agro.Application.Sincronizacion.Commands.ProcesarSincronizacion;
@@ -27,6 +29,7 @@ using Agro.Application.Sincronizacion.Common;
 using Agro.Application.Sincronizacion.Queries.ObtenerEstado;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Agro.Application.Perfil.Queries.ObtenerPerfil;
 
 namespace Agro.Application;
 
@@ -88,6 +91,11 @@ public static class DependencyInjection
         services.AddScoped<ObtenerEstadoHandler>();
         services.AddScoped<EjecutorOperaciones>();
         services.AddScoped<ProcesarSincronizacionHandler>();
+
+        // Perfil
+        services.AddScoped<ObtenerPerfilHandler>();
+        services.AddScoped<ActualizarPerfilHandler>();
+        services.AddScoped<CambiarContrasenaHandler>();
 
         return services;
     }
