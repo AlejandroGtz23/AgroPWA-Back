@@ -18,7 +18,7 @@ public static class ConfiguracionBaseDatos
             Username = VariablesEntorno.Obtener("DB_USER"),
             Password = VariablesEntorno.Obtener("DB_PASSWORD"),
             SslMode = ModoSsl(),
-            Timeout = 15   // si la base no responde en 5 segundos, falla rápido
+            Timeout = 15   // si la base no responde en 15 segundos, falla rápido
         };
         return cadena.ConnectionString; 
     }
