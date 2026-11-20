@@ -1,5 +1,6 @@
 using Agro.Application.Common.Interfaces;
 using Agro.Infrastructure.Configuration;
+using Agro.Infrastructure.Correo;
 using Agro.Infrastructure.Persistence;
 using Agro.Infrastructure.Persistence.Procedimientos;
 using Agro.Infrastructure.Security;
@@ -14,7 +15,7 @@ namespace Agro.Infrastructure;
 public static class DependencyInjection
 {
     public static IServiceCollection AddInfraestructure(this IServiceCollection services, string cadenaConexion, 
-        ConfiguracionJwt configuracionJwt, ConfiguracionAlmacen configuracionAlmacen)
+        ConfiguracionJwt configuracionJwt, ConfiguracionAlmacen configuracionAlmacen, ConfiguracionCorreo configuracionCorreo)
     {
         // Base de datos 
         services.AddDbContext<AgroDbContext>(opciones => opciones.UseNpgsql(cadenaConexion));
@@ -35,6 +36,18 @@ public static class DependencyInjection
         services.AddSingleton<IAlmacenFotos, AlmacenFotosAzure>();
         services.AddScoped<IFotografiasProcedimientos, FotografiasProcedimientos>();
         services.AddScoped<ISincronizacionProcedimientos, SincronizacionProcedimientos>();
+
+        services.AddScoped<IPerfilProcedimientos, PerfilProcedimientos>();
+
+        // Correo: Gmail (SMTP) si hay SMTP_HOST; si no, la consola
+        services.AddSingleton(configuracionCorreo);
+        if (configuracionCorreo.UsaSmtp)
+            services.AddSingleton<IEnvioCorreo, EnvioCorreoSmtp>();
+        else
+            services.AddSingleton<IEnvioCorreo, EnvioCorreoConsola>();
+
+        services.AddScoped<IRecuperacionProcedimientos, RecuperacionProcedimientos>();
+
 
         return services;
     }
