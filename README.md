@@ -16,6 +16,7 @@ HU-14 · Registrar cultivo · HU-15 · Consultar cultivos · HU-16 · Detalle de
 HU-17 · Editar cultivo · HU-18 · Eliminar cultivo · HU-28 · Formulario de contacto · Sprint 7 (backend)
 HU-19 · Registrar avance · HU-20 · Fotografías · Sprint 8 (backend)
 HU-21 · Trabajo sin conexión · HU-22 · Sincronización de datos · Sprint 9 (backend)
+HU-26 · Perfil · HU-27 · Recuperar contraseña · Sprint 10 (backend)
 Equipo: Victor Manuel Jose Jose · Jesus Alejandro Gutierrez Montufar (10 IDGS-G3, UTTT)
 
 **API en producción (Azure):** `https://agropwa-api-cfcfcdbhdddqh7a7.centralus-01.azurewebsites.net`
@@ -66,7 +67,14 @@ Agro/
 │   │   │   ├── Commands/IniciarSesion/           command + handler + validador   (HU-10)
 │   │   │   ├── Commands/RenovarSesion/           command + handler + validador   (HU-10)
 │   │   │   ├── Commands/CerrarSesion/            command + handler               (HU-11)
-│   │   │   └── Common/                           CreadorSesion, ValidadorSesion, ReglasSesion, DTOs
+│   │   │   ├── Commands/SolicitarRecuperacion/   command + handler + validador   (HU-27)
+│   │   │   ├── Commands/RestablecerContrasena/   command + handler + validador   (HU-27)
+│   │   │   └── Common/                           CreadorSesion, ValidadorSesion, ReglasSesion, ReglasUsuario, DTOs
+│   │   ├── Perfil/
+│   │   │   ├── Queries/ObtenerPerfil/            handler                         (HU-26)
+│   │   │   ├── Commands/ActualizarPerfil/        command + handler + validador   (HU-26)
+│   │   │   ├── Commands/CambiarContrasena/       command + handler + validador   (HU-26)
+│   │   │   └── Common/                           PerfilDto
 │   │   ├── Parcelas/
 │   │   │   ├── Commands/RegistrarParcela/        command + handler + validador   (HU-13)
 │   │   │   ├── Commands/EditarParcela/           command + handler + validador   (HU-13)
@@ -104,7 +112,8 @@ Agro/
 │   │   │   │                                     IDashboardProcedimientos, ICultivosProcedimientos,
 │   │   │   │                                     IContactoProcedimientos, IAvancesProcedimientos,
 │   │   │   │                                     IFotografiasProcedimientos, IAlmacenFotos,
-│   │   │   │                                     ISincronizacionProcedimientos,
+│   │   │   │                                     ISincronizacionProcedimientos, IPerfilProcedimientos,
+│   │   │   │                                     IRecuperacionProcedimientos, IEnvioCorreo,
 │   │   │   │                                     IGeneradorJwt, IHashContrasena
 │   │   │   └── Models/                           datos que viajan a los procedimientos
 │   │   ├── Salud/Queries/ComprobarSalud/         query + DTO de /api/salud
@@ -113,7 +122,9 @@ Agro/
 │   │   ├── Configuration/                        lectura del .env, cadena de conexión, ConfiguracionJwt y ConfiguracionAlmacen
 │   │   ├── Persistence/                          AgroDbContext + verificación de conexión
 │   │   │   └── Procedimientos/                   ProcedimientosBase (métodos comunes) + Auth, Parcelas, Dashboard, Cultivos,
-│   │   │                                         Contacto, Avances, Fotografias y Sincronizacion
+│   │   │                                         Contacto, Avances, Fotografias, Sincronizacion,
+│   │   │                                         Perfil y Recuperacion
+│   │   ├── Correo/                               EnvioCorreoSmtp (Gmail, MailKit), EnvioCorreoConsola (local), plantillas
 │   │   ├── Storage/                              AlmacenFotosAzure (Azure Blob Storage y enlaces SAS)
 │   │   ├── Security/                             HashContrasenaBCrypt, GeneradorJwt
 │   │   └── DependencyInjection.cs                AddInfraestructure()
@@ -161,6 +172,8 @@ Agro/
    | `JWT_MINUTOS` | `20` | Duración del access token |
    | `STORAGE_CONEXION` | `UseDevelopmentStorage=true` | Almacenamiento de fotos: en local, Azurite (cadena pública fija); en Azure, la cadena de conexión de la cuenta (**secreta**) |
    | `STORAGE_CONTENEDOR` | `fotografias` | Contenedor privado de las fotos |
+   | `SMTP_HOST`, `SMTP_PUERTO`, `SMTP_USUARIO`, `SMTP_CONTRASENA`, `SMTP_REMITENTE` | `smtp.gmail.com`, `587`… | Correo de recuperación (opcional en local: **sin `SMTP_HOST` el enlace se escribe en la consola**). Con Gmail, `SMTP_CONTRASENA` es una *contraseña de aplicación* (**secreta**) |
+   | `URL_RESTABLECER` | `http://localhost:5173/restablecer` | Pantalla del frontend que recibe `?token=…` |
 
    > En el `.env` solo debe estar activa **una** configuración (local o Azure); la otra, comentada con `#`.
 
@@ -187,6 +200,8 @@ Agro/
 | `POST /api/auth/renovar` | No (usa el refresh token) | **200** tokens nuevos · **400** · **401** sesión vencida o cerrada |
 | `GET /api/auth/yo` | `[Authorize]` | **200** `{ id, correo, rol }` · **401** |
 | `POST /api/auth/logout` | `[Authorize]` | **204** sesión cerrada · **401** ya estaba cerrada |
+| `POST /api/auth/recuperar` | No (máx. 10 por minuto por IP) | **200 siempre** «Si el correo está registrado, te enviamos un enlace…» · **400** correo inválido |
+| `POST /api/auth/restablecer` | No (máx. 10 por minuto por IP) | **204** · **400** «El enlace expiró o ya se usó. Solicita uno nuevo.» |
 
 La sesión que devuelven registro, login y renovar:
 
@@ -362,6 +377,33 @@ nadie puede ver una foto sin pasar por la API. En local se usa Azurite con el mi
 | Al eliminar un cultivo se borran también los archivos de sus fotos | `EliminarCultivoHandler` |
 | `portadaUrl` y la galería del detalle se devuelven como enlaces temporales | `EnlacesFotografias` |
 
+## Perfil (HU-26)
+
+| Método y ruta | Respuestas |
+|---|---|
+| `GET /api/perfil` | **200** `{ nombre, apellidoPaterno, apellidoMaterno, correo, telefono, comunidadMunicipio, rol, fechaRegistro }` · **404** |
+| `PUT /api/perfil` | **200** el perfil actualizado · **400** · **404** |
+| `PUT /api/perfil/contrasena` (`contrasenaActual`, `contrasenaNueva`) | **204** · **400** «La contraseña actual no es correcta.» |
+
+| Regla | Dónde se cumple |
+|---|---|
+| El correo **no** se puede cambiar (el command no lo tiene) | `ActualizarPerfilCommand` |
+| Nombre y apellido paterno de 2 a 60 letras, teléfono opcional de 10 dígitos, contraseña de 8 a 72 (las mismas reglas que el registro) | `ReglasUsuario` |
+| La contraseña actual se verifica con BCrypt; si no coincide responde **400** en `contrasenaActual` (no 401, para no parecer sesión cerrada) | `CambiarContrasenaHandler` |
+| Al cambiarla se cierran las **demás** sesiones; la actual (su `jti`) sigue abierta | `sp_cambiar_contrasena` |
+
+## Recuperar contraseña (HU-27)
+
+1. `POST /api/auth/recuperar` genera un token aleatorio (64 bytes) y guarda **solo su hash SHA-256** (vence en 30 min,
+   máx. 3 por hora, invalida los anteriores). Si el correo existe, manda el enlace `URL_RESTABLECER?token=…`.
+2. Responde **siempre lo mismo**, exista o no el correo, para no revelar quién está registrado. Si Gmail falla, se
+   anota en el log sin cambiar la respuesta.
+3. `POST /api/auth/restablecer` busca el token por su hash: es de **un solo uso**, cambia la contraseña, quita el
+   bloqueo por intentos y cierra **todas** las sesiones.
+
+Correo: `IEnvioCorreo` con `EnvioCorreoSmtp` (Gmail por SMTP con STARTTLS, MailKit) si hay `SMTP_HOST`; si no,
+`EnvioCorreoConsola`, que escribe el enlace en la consola de la API (desarrollo local).
+
 ## Sincronización (HU-21, HU-22)
 
 La PWA guarda sin conexión (IndexedDB) y envía la cola al recuperar la señal. Todos los endpoints de creación
@@ -435,10 +477,13 @@ ejecutan procedimientos almacenados con parámetros tipados (`NpgsqlParameter`),
 | `sp_registrar_resultado_sincronizacion` | Resultado de cada operación en la cola | 017 |
 | `sp_marcar_sincronizacion_dispositivo` | Actualiza la última sincronización | 017 |
 | `sp_obtener_id_por_local` | `idLocal` → id del servidor | 017 |
+| `sp_obtener_perfil` · `sp_actualizar_perfil` | Perfil del usuario (el correo no cambia) | 018 |
+| `sp_obtener_hash_contrasena` · `sp_cambiar_contrasena` | Cambiar contraseña; cierra las demás sesiones | 018 |
+| `sp_crear_codigo_recuperacion` · `sp_restablecer_contrasena` | Enlace de recuperación de un solo uso | 019 |
 
 `ProcedimientosBase` tiene los métodos comunes que heredan `AuthProcedimientos`, `ParcelasProcedimientos`,
 `DashboardProcedimientos`, `CultivosProcedimientos`, `ContactoProcedimientos`, `AvancesProcedimientos` y
-`FotografiasProcedimientos` y `SincronizacionProcedimientos`. `ErrorDeCampo` convierte la columna que indica el procedimiento (`RAISE … COLUMN`)
+`FotografiasProcedimientos` , `SincronizacionProcedimientos`, `PerfilProcedimientos` y `RecuperacionProcedimientos`. `ErrorDeCampo` convierte la columna que indica el procedimiento (`RAISE … COLUMN`)
 en el nombre del campo del JSON (`duracion_min` → `duracionMin`):
 
 | Método | Para |
@@ -494,11 +539,13 @@ dotnet test Agro/Agro.slnx --collect:"XPlat Code Coverage"
 | `Application/Avances/RegistrarAvanceTests` | Registro, `idLocal` repetido, textos limpios, cultivo ajeno (404) y finalizado (409), tipo inválido (400), catálogo, obligatorios, duración 0 o negativa, fecha futura con tolerancia, cantidad y decimales, descripción de 500 |
 | `Application/Fotografias/FotografiasTests` | PNG y JPG por su firma, archivo que no es imagen, vacío o de más de 5 MB, la BD falla y se borra el archivo, `idLocal` repetido borra la copia, coordenadas, eliminar propia y ajena |
 | `Application/Sincronizacion/SincronizacionTests` | Orden de creación y traducción de `idLocal`, una falla no detiene el lote, reenviar sin duplicar, id de un envío anterior, referencia sin sincronizar, editar un cultivo creado sin conexión, eliminar inexistente, datos inválidos, dispositivo ajeno (404), validador del lote y dispositivos |
+| `Application/Perfil/PerfilTests` | Consultar y 404, actualizar sin cambiar el correo, teléfono opcional o de 10 dígitos, nombre de una letra, contraseña actual incorrecta (400, sin cambios), nueva igual o corta, conserva la sesión actual |
+| `Application/Auth/RecuperacionTests` | Manda el token (no el hash) y el correo en minúsculas, correo inexistente con la misma respuesta, máximo 3 por hora, token de un solo uso, inventado o vacío, contraseña corta |
 | `Infrastructure/Security/SeguridadTests` | BCrypt, contenido del JWT y refresh token (aleatorio + SHA-256) |
 
-**177 pruebas.** Ninguna usa base de datos: los archivos de falsos (`Falsos.cs`, `ParcelasFalsas.cs`,
+**200 pruebas.** Ninguna usa base de datos: los archivos de falsos (`Falsos.cs`, `ParcelasFalsas.cs`,
 `DashboardProcedimientosFalsos.cs`, `CultivosFalsos.cs`, `ContactoFalsos.cs`, `AvancesFalsos.cs`, `FotografiasFalsas.cs`,
-`AlmacenFotosFalso.cs` y `SincronizacionFalsos.cs`) reemplazan los procedimientos almacenados, el JWT y el hash
+`AlmacenFotosFalso.cs`, `SincronizacionFalsos.cs`, `PerfilFalsos.cs` y `RecuperacionFalsos.cs`) reemplazan los procedimientos almacenados, el JWT y el hash
 por objetos que devuelven lo que cada prueba necesita y guardan lo que reciben. `ParcelasFalsas.cs` y
 `CultivosFalsos.cs` aplican en memoria las mismas reglas que los procedimientos de las migraciones 011 y 013.
 `RelojFijo` (en `CultivosFalsos.cs`) es un `TimeProvider` con hora fija, para que las pruebas de fechas no dependan
@@ -523,7 +570,7 @@ El **Quality Gate** decide si el código cumple el estándar y su resultado apar
 | Rama principal en Sonar | `develop` (el plan Free solo muestra el detalle completo de la rama principal) |
 | Cobertura | `coverlet.collector` en formato OpenCover (`coverage.opencover.xml`) |
 | Quality Gate | Código nuevo: calificación A en confiabilidad, seguridad y mantenibilidad · **cobertura ≥ 80 %** · duplicación ≤ 3 % · hotspots revisados |
-| Exclusiones de cobertura | `Agro.Api/**`, `Infrastructure/Persistence/**`, `Infrastructure/Storage/**`, `Infrastructure/Configuration/**`, `DependencyInjection.cs` y `Domain/Entities/**` |
+| Exclusiones de cobertura | `Agro.Api/**`, `Infrastructure/Persistence/**`, `Infrastructure/Storage/**`, `Infrastructure/Correo/**`, `Infrastructure/Configuration/**`, `DependencyInjection.cs` y `Domain/Entities/**` |
 
 Las exclusiones solo quitan esos archivos del **cálculo de cobertura**: necesitan la base real o el servidor web
 para ejecutarse (se prueban con Swagger y en Azure). Sonar sigue revisándolos en busca de bugs y vulnerabilidades.
@@ -546,13 +593,13 @@ El scanner trabaja en tres fases: `begin` (se engancha al compilador) → `dotne
 
 ### Resultados
 
-| Métrica | Sprint 3 (inicial) | Sprint 3 (final) | Sprint 4 | Sprint 5 | Sprint 6 | Sprint 7 | Sprint 8 | Sprint 9 |
-|---|---|---|---|---|---|---|---|---|
-| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) | 0 | 0 | 0 | 0 | 0 | 0 |
-| Code smells | 3 | 0 | 0 | 0 | 0 | 0 nuevos | 0 nuevos | 0 nuevos |
-| Bugs | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| Cobertura del código nuevo | — | — | **100 %** | **98 %** | **100 %** | **95.7 %** | **99.0 %** | **86.5 %** |
-| Quality Gate | — | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** |
+| Métrica | Sprint 3 (inicial) | Sprint 3 (final) | Sprint 4 | Sprint 5 | Sprint 6 | Sprint 7 | Sprint 8 | Sprint 9 | Sprint 10 |
+|---|---|---|---|---|---|---|---|---|---|
+| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Code smells | 3 | 0 | 0 | 0 | 0 | 0 nuevos | 0 nuevos | 0 nuevos | 0 nuevos |
+| Bugs | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Cobertura del código nuevo | — | — | **100 %** | **98 %** | **100 %** | **95.7 %** | **99.0 %** | **86.5 %** | **100 %** |
+| Quality Gate | — | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** |
 
 En el Sprint 6 las pruebas encontraron un bug antes de llegar a producción: `?estado=` (vacío, el filtro «Todos»)
 respondía 400; el validador ahora trata el estado vacío como «sin filtro», igual que el handler.
@@ -569,6 +616,10 @@ En el Sprint 8 (PR [#59](https://github.com/AlejandroGtz23/AgroPWA-Back/pull/59)
 En el Sprint 9 (PR [#64](https://github.com/AlejandroGtz23/AgroPWA-Back/pull/64)) una prueba contra la API local
 encontró que una edición hecha sin conexión se descartaba por la regla de conflictos (se comparaba con la hora
 en que se sincronizó la creación); se corrigió antes de subir y quedó cubierto por una prueba unitaria.
+
+En el Sprint 10 (PR [#67](https://github.com/AlejandroGtz23/AgroPWA-Back/pull/67)) el Quality Gate falló por
+**Seguridad B**: la regla S6444 marcó un `Regex.IsMatch` sin tiempo límite (riesgo de ReDoS) en la validación del
+teléfono. Se reemplazó por `t.Length == 10 && t.All(char.IsAsciiDigit)` y volvió a **A** con 100 % de cobertura.
 
 | Regla | Archivo | Corrección |
 |---|---|---|
@@ -676,6 +727,9 @@ En Azure no hay archivo `.env`: la configuración está en **agropwa-api → Con
 | `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | `true` (el límite de peticiones usa la IP real del cliente detrás del proxy de Azure) |
 | `STORAGE_CONEXION` | Cadena de conexión de la cuenta de almacenamiento (**secreta**, solo en Azure). Sin ella la API no arranca |
 | `STORAGE_CONTENEDOR` | `fotografias` |
+| `SMTP_HOST` · `SMTP_PUERTO` | `smtp.gmail.com` · `587` |
+| `SMTP_USUARIO` · `SMTP_CONTRASENA` | Cuenta de Gmail y su *contraseña de aplicación* (**secreta**, solo en Azure). Con `SMTP_HOST` y sin ellas la API no arranca |
+| `URL_RESTABLECER` | URL del frontend + `/restablecer` |
 
 ### Integración y despliegue continuo (GitHub Actions)
 
