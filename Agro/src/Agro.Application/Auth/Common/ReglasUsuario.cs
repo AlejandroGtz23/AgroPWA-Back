@@ -15,7 +15,7 @@ public static class ReglasUsuario
 
     /// <summary>Teléfono opcional; si viene, 10 dígitos (migraciones 004 y 005).</summary>
     public static IRuleBuilderOptions<T, string?> Telefono<T>(this IRuleBuilderInitial<T, string?> regla) =>
-        regla.Must(t => string.IsNullOrWhiteSpace(t) || Regex.IsMatch(t, "^[0-9]{10}$"))
+        regla.Must(t => string.IsNullOrWhiteSpace(t) || (t.Length == 10 && t.All(char.IsAsciiDigit)))
             .WithMessage("El teléfono debe tener 10 dígitos.");
 
     /// <summary>Contraseña de 8 a 72 caracteres (72 es el límite de BCrypt).</summary>
