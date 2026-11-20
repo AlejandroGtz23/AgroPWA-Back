@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.JsonWebTokens;
 using System.Security.Claims;
+using Agro.Application.Auth.Commands.RestablecerContrasena;
+using Agro.Application.Auth.Commands.SolicitarRecuperacion;
 
 namespace Agro.Api.Controllers;
 /// <summary>
@@ -22,7 +24,9 @@ public class AuthController(
     RegistrarUsuarioHandler registrarUsuario,
     IniciarSesionHandler iniciarSesion,
     RenovarSesionHandler renovarSesion,
-    CerrarSesionHandler cerrarSesion) : ControllerBase
+    CerrarSesionHandler cerrarSesion,
+    SolicitarRecuperacionHandler solicitarRecuperacion,
+    RestablecerContrasenaHandler restablecerContrasena) : ControllerBase
 {
     [HttpPost("registro")]
     [ProducesResponseType<SesionDto>(StatusCodes.Status201Created)]
@@ -84,6 +88,24 @@ public class AuthController(
     {
         var jti = User.FindFirstValue(JwtRegisteredClaimNames.Jti)!;   // del token ya validado
         await cerrarSesion.EjecutarAsync(new CerrarSesionCommand(jti), ct);
+        return NoContent();
+    }
+
+    [HttpPost("recuperar")]
+    [EnableRateLimiting("login")]                                   // máximo 10 por minuto por IP
+    [ProducesResponseType<RespuestaRecuperacionDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<RespuestaRecuperacionDto>> Recuperar(SolicitarRecuperacionCommand comando,
+    CancellationToken ct) =>
+    Ok(await solicitarRecuperacion.EjecutarAsync(comando, ct));
+
+    [HttpPost("restablecer")]
+    [EnableRateLimiting("login")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Restablecer(RestablecerContrasenaCommand comando, CancellationToken ct)
+    {
+        await restablecerContrasena.EjecutarAsync(comando, ct);
         return NoContent();
     }
 }

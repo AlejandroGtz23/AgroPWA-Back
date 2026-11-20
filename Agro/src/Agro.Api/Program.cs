@@ -17,12 +17,14 @@ string cadenaConexion;
 string[] origenesFrontend;
 ConfiguracionJwt configuracionJwt;
 ConfiguracionAlmacen configuracionAlmacen;
+ConfiguracionCorreo configuracionCorreo;
 try
 {
     cadenaConexion = ConfiguracionBaseDatos.CadenaConexion();
     origenesFrontend = VariablesEntorno.OrigenesFrontend();
     configuracionJwt = ConfiguracionJwt.DesdeVariables();
     configuracionAlmacen = ConfiguracionAlmacen.DesdeVariables();
+    configuracionCorreo = ConfiguracionCorreo.DesdeVariables();
 }
 catch (InvalidOperationException ex)
 {
@@ -37,7 +39,7 @@ var builder = WebApplication.CreateBuilder(args);
 // ---------------------------------------------------------------------
 
 builder.Services.AddApplication();                          // commands, queries y validadores
-builder.Services.AddInfraestructure(cadenaConexion, configuracionJwt, configuracionAlmacen);        // PostgreSQL (agro_db)
+builder.Services.AddInfraestructure(cadenaConexion, configuracionJwt, configuracionAlmacen, configuracionCorreo);        // PostgreSQL (agro_db)
 
 // CORS: solo se aceptan peticiones del dominio del frontend
 const string PoliticaFrontend = "Frontend";

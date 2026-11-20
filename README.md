@@ -15,6 +15,7 @@ HU-12 · Dashboard principal · HU-13 · Registrar parcela · Sprint 5 (backend)
 HU-14 · Registrar cultivo · HU-15 · Consultar cultivos · HU-16 · Detalle del cultivo · Sprint 6 (backend)
 HU-17 · Editar cultivo · HU-18 · Eliminar cultivo · HU-28 · Formulario de contacto · Sprint 7 (backend)
 HU-19 · Registrar avance · HU-20 · Fotografías · Sprint 8 (backend)
+HU-21 · Trabajo sin conexión · HU-22 · Sincronización de datos · Sprint 9 (backend)
 Equipo: Victor Manuel Jose Jose · Jesus Alejandro Gutierrez Montufar (10 IDGS-G3, UTTT)
 
 **API en producción (Azure):** `https://agropwa-api-cfcfcdbhdddqh7a7.centralus-01.azurewebsites.net`
@@ -90,6 +91,12 @@ Agro/
 │   │   │   ├── Commands/SubirFotografia/         command + handler + validador   (HU-20)
 │   │   │   ├── Commands/EliminarFotografia/      handler                         (HU-20)
 │   │   │   └── Common/                           TipoImagen (firma JPG/PNG), EnlacesFotografias (ruta → enlace)
+│   │   ├── Sincronizacion/
+│   │   │   ├── Commands/RegistrarDispositivo/    command + handler + validador   (HU-22)
+│   │   │   ├── Commands/ActualizarPreferencias/  command + handler + validador   (HU-22)
+│   │   │   ├── Commands/ProcesarSincronizacion/  command + handler + validador   (HU-22)
+│   │   │   ├── Queries/ObtenerEstado/            handler                         (HU-22)
+│   │   │   └── Common/                           EjecutorOperaciones (cada operación con su handler), DTOs
 │   │   ├── Catalogos/Queries/ObtenerTiposCultivo/  handler                       (HU-14)
 │   │   ├── Common/
 │   │   │   ├── Exceptions/                       Conflicto (409), NoEncontrado (404), NoAutorizado (401), DemasiadosIntentos (429)
@@ -97,6 +104,7 @@ Agro/
 │   │   │   │                                     IDashboardProcedimientos, ICultivosProcedimientos,
 │   │   │   │                                     IContactoProcedimientos, IAvancesProcedimientos,
 │   │   │   │                                     IFotografiasProcedimientos, IAlmacenFotos,
+│   │   │   │                                     ISincronizacionProcedimientos,
 │   │   │   │                                     IGeneradorJwt, IHashContrasena
 │   │   │   └── Models/                           datos que viajan a los procedimientos
 │   │   ├── Salud/Queries/ComprobarSalud/         query + DTO de /api/salud
@@ -105,7 +113,7 @@ Agro/
 │   │   ├── Configuration/                        lectura del .env, cadena de conexión, ConfiguracionJwt y ConfiguracionAlmacen
 │   │   ├── Persistence/                          AgroDbContext + verificación de conexión
 │   │   │   └── Procedimientos/                   ProcedimientosBase (métodos comunes) + Auth, Parcelas, Dashboard, Cultivos,
-│   │   │                                         Contacto, Avances y Fotografias
+│   │   │                                         Contacto, Avances, Fotografias y Sincronizacion
 │   │   ├── Storage/                              AlmacenFotosAzure (Azure Blob Storage y enlaces SAS)
 │   │   ├── Security/                             HashContrasenaBCrypt, GeneradorJwt
 │   │   └── DependencyInjection.cs                AddInfraestructure()
@@ -354,6 +362,38 @@ nadie puede ver una foto sin pasar por la API. En local se usa Azurite con el mi
 | Al eliminar un cultivo se borran también los archivos de sus fotos | `EliminarCultivoHandler` |
 | `portadaUrl` y la galería del detalle se devuelven como enlaces temporales | `EnlacesFotografias` |
 
+## Sincronización (HU-21, HU-22)
+
+La PWA guarda sin conexión (IndexedDB) y envía la cola al recuperar la señal. Todos los endpoints de creación
+aceptan `idLocal` (UUID del dispositivo), así que reenviar algo **no lo duplica** (HU-21 del lado del servidor).
+
+| Método y ruta | Respuestas |
+|---|---|
+| `POST /api/dispositivos` | **201** el dispositivo · **200** si el identificador ya existía · **400** |
+| `PUT /api/dispositivos/{id}/preferencias` (`sincronizarAuto`, `soloWifi`, `espacioUsadoMb?`) | **200** · **400** · **404** |
+| `GET /api/sincronizacion/estado?idDispositivo=` | **200** `{ ultimaSincronizacion, errores, … }` · **404** |
+| `POST /api/sincronizacion` | **200** `{ sincronizados, errores, resultados: [ { idLocal, estado, id, mensajeError } ] }` · **400** · **404** |
+
+```json
+{ "idDispositivo": 6,
+  "operaciones": [
+    { "entidad": "parcela", "idLocal": "…01", "operacion": "crear", "fechaCreacion": "2026-11-11T10:00:00Z",
+      "datos": { "nombre": "Parcela sin señal", "superficieHa": 2.5 } },
+    { "entidad": "cultivo", "idLocal": "…02", "operacion": "crear", "fechaCreacion": "2026-11-11T10:01:00Z",
+      "datos": { "nombre": "Frijol", "idTipoCultivo": 2, "fechaSiembra": "2026-11-01", "idLocalParcela": "…01" } } ] }
+```
+
+| Regla | Dónde se cumple |
+|---|---|
+| Permitidas: parcela crear/editar · cultivo crear/editar/eliminar · avance crear · fotografía eliminar (las fotos se suben con su endpoint) · máximo 100 por lote | `ProcesarSincronizacionValidator` |
+| Cada operación usa **el mismo handler que en línea** (mismas validaciones) | `EjecutorOperaciones` |
+| Orden de `fechaCreacion` (empate: parcelas → cultivos → avances → fotos) | `ProcesarSincronizacionHandler` |
+| `idLocalParcela` / `idLocalCultivo` (o el `idLocal` de la operación al editar o eliminar) se traducen al id del servidor: primero lo creado en el lote, luego la BD | `EjecutorOperaciones` y `sp_obtener_id_por_local` |
+| Una operación que falla queda en «error» con su mensaje y **no detiene las demás** | `ProcesarSincronizacionHandler` |
+| Si se cae la BD (`DbException`) responde 503 y el frontend reenvía el lote: lo ya guardado no se duplica | `idLocal` en cada procedimiento |
+| Conflicto: `fechaModificacion` solo al editar algo descargado del servidor; si es anterior al último cambio, gana el del servidor | `sp_editar_cultivo` |
+| Cada resultado se guarda en `cola_sincronizacion` (reintentos suman intentos) y se actualiza la última sincronización | Migración 017 |
+
 ## Acceso a datos: solo procedimientos almacenados
 
 Por seguridad, la API **no hace consultas directas** a las tablas. Las clases de `Persistence/Procedimientos`
@@ -389,10 +429,16 @@ ejecutan procedimientos almacenados con parámetros tipados (`NpgsqlParameter`),
 | `sp_registrar_fotografia` | Registra la foto ya subida; portada única, máx. 5 por avance | 016 |
 | `sp_obtener_fotografia` | La foto del usuario (cursor) | 016 |
 | `sp_eliminar_fotografia` | Borra la foto y devuelve su ruta para borrar el archivo | 016 |
+| `sp_registrar_dispositivo` | Registra el dispositivo o devuelve el mismo | 017 |
+| `sp_actualizar_preferencias_dispositivo` | Preferencias; `false` → 404 | 017 |
+| `sp_obtener_estado_sincronizacion` | Última sincronización y errores (cursor) | 017 |
+| `sp_registrar_resultado_sincronizacion` | Resultado de cada operación en la cola | 017 |
+| `sp_marcar_sincronizacion_dispositivo` | Actualiza la última sincronización | 017 |
+| `sp_obtener_id_por_local` | `idLocal` → id del servidor | 017 |
 
 `ProcedimientosBase` tiene los métodos comunes que heredan `AuthProcedimientos`, `ParcelasProcedimientos`,
 `DashboardProcedimientos`, `CultivosProcedimientos`, `ContactoProcedimientos`, `AvancesProcedimientos` y
-`FotografiasProcedimientos`. `ErrorDeCampo` convierte la columna que indica el procedimiento (`RAISE … COLUMN`)
+`FotografiasProcedimientos` y `SincronizacionProcedimientos`. `ErrorDeCampo` convierte la columna que indica el procedimiento (`RAISE … COLUMN`)
 en el nombre del campo del JSON (`duracion_min` → `duracionMin`):
 
 | Método | Para |
@@ -447,11 +493,12 @@ dotnet test Agro/Agro.slnx --collect:"XPlat Code Coverage"
 | `Application/Contacto/EnviarMensajeContactoTests` | Datos limpios (correo en minúsculas, asunto vacío en null), 4.º mensaje en una hora (429), inválidos no se guardan, obligatorios, correos inválidos (incluido sin punto), mensaje de 1000 y 1001 caracteres |
 | `Application/Avances/RegistrarAvanceTests` | Registro, `idLocal` repetido, textos limpios, cultivo ajeno (404) y finalizado (409), tipo inválido (400), catálogo, obligatorios, duración 0 o negativa, fecha futura con tolerancia, cantidad y decimales, descripción de 500 |
 | `Application/Fotografias/FotografiasTests` | PNG y JPG por su firma, archivo que no es imagen, vacío o de más de 5 MB, la BD falla y se borra el archivo, `idLocal` repetido borra la copia, coordenadas, eliminar propia y ajena |
+| `Application/Sincronizacion/SincronizacionTests` | Orden de creación y traducción de `idLocal`, una falla no detiene el lote, reenviar sin duplicar, id de un envío anterior, referencia sin sincronizar, editar un cultivo creado sin conexión, eliminar inexistente, datos inválidos, dispositivo ajeno (404), validador del lote y dispositivos |
 | `Infrastructure/Security/SeguridadTests` | BCrypt, contenido del JWT y refresh token (aleatorio + SHA-256) |
 
-**161 pruebas.** Ninguna usa base de datos: los archivos de falsos (`Falsos.cs`, `ParcelasFalsas.cs`,
-`DashboardProcedimientosFalsos.cs`, `CultivosFalsos.cs`, `ContactoFalsos.cs`, `AvancesFalsos.cs`, `FotografiasFalsas.cs` y
-`AlmacenFotosFalso.cs`) reemplazan los procedimientos almacenados, el JWT y el hash
+**177 pruebas.** Ninguna usa base de datos: los archivos de falsos (`Falsos.cs`, `ParcelasFalsas.cs`,
+`DashboardProcedimientosFalsos.cs`, `CultivosFalsos.cs`, `ContactoFalsos.cs`, `AvancesFalsos.cs`, `FotografiasFalsas.cs`,
+`AlmacenFotosFalso.cs` y `SincronizacionFalsos.cs`) reemplazan los procedimientos almacenados, el JWT y el hash
 por objetos que devuelven lo que cada prueba necesita y guardan lo que reciben. `ParcelasFalsas.cs` y
 `CultivosFalsos.cs` aplican en memoria las mismas reglas que los procedimientos de las migraciones 011 y 013.
 `RelojFijo` (en `CultivosFalsos.cs`) es un `TimeProvider` con hora fija, para que las pruebas de fechas no dependan
@@ -499,13 +546,13 @@ El scanner trabaja en tres fases: `begin` (se engancha al compilador) → `dotne
 
 ### Resultados
 
-| Métrica | Sprint 3 (inicial) | Sprint 3 (final) | Sprint 4 | Sprint 5 | Sprint 6 | Sprint 7 | Sprint 8 |
-|---|---|---|---|---|---|---|---|
-| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) | 0 | 0 | 0 | 0 | 0 |
-| Code smells | 3 | 0 | 0 | 0 | 0 | 0 nuevos | 0 nuevos |
-| Bugs | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| Cobertura del código nuevo | — | — | **100 %** | **98 %** | **100 %** | **95.7 %** | **99.0 %** |
-| Quality Gate | — | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** |
+| Métrica | Sprint 3 (inicial) | Sprint 3 (final) | Sprint 4 | Sprint 5 | Sprint 6 | Sprint 7 | Sprint 8 | Sprint 9 |
+|---|---|---|---|---|---|---|---|---|
+| Vulnerabilidades | 1 (Seguridad **C**) | 0 (Seguridad **A**) | 0 | 0 | 0 | 0 | 0 | 0 |
+| Code smells | 3 | 0 | 0 | 0 | 0 | 0 nuevos | 0 nuevos | 0 nuevos |
+| Bugs | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Cobertura del código nuevo | — | — | **100 %** | **98 %** | **100 %** | **95.7 %** | **99.0 %** | **86.5 %** |
+| Quality Gate | — | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** | **Passed** |
 
 En el Sprint 6 las pruebas encontraron un bug antes de llegar a producción: `?estado=` (vacío, el filtro «Todos»)
 respondía 400; el validador ahora trata el estado vacío como «sin filtro», igual que el handler.
@@ -518,6 +565,10 @@ error real; el log de PostgreSQL lo mostró).
 En el Sprint 8 (PR [#59](https://github.com/AlejandroGtz23/AgroPWA-Back/pull/59)) se excluyó de la cobertura
 `Infrastructure/Storage/**`, igual que `Persistence`: habla con un servicio real (Azure) y se prueba en Swagger.
 `dotnet test` **no compila `Agro.Api`** (ninguna prueba lo usa): para revisar todo, usar también `dotnet build`.
+
+En el Sprint 9 (PR [#64](https://github.com/AlejandroGtz23/AgroPWA-Back/pull/64)) una prueba contra la API local
+encontró que una edición hecha sin conexión se descartaba por la regla de conflictos (se comparaba con la hora
+en que se sincronizó la creación); se corrigió antes de subir y quedó cubierto por una prueba unitaria.
 
 | Regla | Archivo | Corrección |
 |---|---|---|
