@@ -39,6 +39,8 @@ public static class DependencyInjection
 
         services.AddScoped<IPerfilProcedimientos, PerfilProcedimientos>();
 
+        services.AddScoped<IVerificacionCorreoProcedimientos, VerificacionCorreoProcedimientos>();
+
         // Correo: Gmail (SMTP) si hay SMTP_HOST; si no, la consola
         services.AddSingleton(configuracionCorreo);
         if (configuracionCorreo.UsaSmtp)

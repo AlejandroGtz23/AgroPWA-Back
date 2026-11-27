@@ -51,6 +51,7 @@ public class RegistrarAvanceTests
         Assert.Equal(MiCultivo, avance.IdCultivo);
         Assert.Equal(40, avance.DuracionMin);
         Assert.Equal(IdLocal, avance.IdLocal);
+        Assert.Equal(Ahora.AddHours(-2), avance.FechaActividad);
     }
 
     [Fact]

@@ -6,4 +6,4 @@ namespace Agro.Application.Perfil.Common;
 
 public sealed record PerfilDto(
 string Nombre, string ApellidoPaterno, string? ApellidoMaterno, string Correo,
-string? Telefono, string? ComunidadMunicipio, string Rol, DateTimeOffset FechaRegistro);
+string? Telefono, string? ComunidadMunicipio, string Rol, DateTimeOffset FechaRegistro, bool CorreoVerificado);

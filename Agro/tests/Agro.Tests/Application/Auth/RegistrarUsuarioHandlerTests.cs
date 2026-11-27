@@ -9,10 +9,13 @@ namespace Agro.Tests.Application.Auth;
 public class RegistrarUsuarioHandlerTests
 {
     private readonly ProcedimientosFalsos _procedimientos = new();
+    private readonly VerificacionCorreoProcedimientosFalsos _verificacion = new();
+    private readonly EnvioCorreoFalso _correo = new();
 
     private RegistrarUsuarioHandler CrearHandler() => new(
         _procedimientos, new HashFalso(),
         new CreadorSesion(new GeneradorJwtFalso(), _procedimientos, TimeProvider.System),
+        new EnviadorVerificacionCorreo(_verificacion, new GeneradorJwtFalso(), _correo),
         new RegistrarUsuarioValidator());
 
     private static RegistrarUsuarioCommand Comando(string? apellidoMaterno = "López", string? telefono = "7711234567")
@@ -80,5 +83,15 @@ public class RegistrarUsuarioHandlerTests
         await Assert.ThrowsAsync<ValidationException>(() => CrearHandler().EjecutarAsync(comando, null, null));
 
         Assert.Null(_procedimientos.UsuarioRegistrado);
+    }
+
+    [Fact]
+    public async Task Al_registrarse_manda_la_bienvenida_con_el_enlace_de_verificacion()
+    {
+        await CrearHandler().EjecutarAsync(Comando(), null, null);
+
+        var bienvenida = Assert.Single(_correo.Bienvenidas);
+        Assert.Equal("refresh-nuevo", bienvenida.Token);   // el correo lleva el token; la BD, solo su hash
+        Assert.Empty(_correo.Enviados);                     // no es un correo de recuperación
     }
 }

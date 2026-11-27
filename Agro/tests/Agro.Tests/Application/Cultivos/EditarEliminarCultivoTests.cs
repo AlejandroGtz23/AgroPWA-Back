@@ -174,4 +174,20 @@ public class EditarEliminarCultivoTests
 
         Assert.Equal(["usuario-1/cultivo-1/a.jpg"], _almacen.Eliminadas);
     }
+
+    [Fact]
+    public void Sin_fecha_de_siembra_no_se_compara_la_cosecha()
+    {
+        var resultado = _validador.Validate(new EditarCultivoCommand(
+            "Maíz", 1, null, null, MiParcela, "finalizado", new DateOnly(2026, 10, 20), null, null));
+
+        Assert.DoesNotContain(resultado.Errors, e => e.PropertyName == "FechaCosecha");
+    }
+
+    [Fact]
+    public void EsFinalizado_acepta_espacios_y_mayusculas_y_no_falla_con_null()
+    {
+        Assert.True(ReglasCultivo.EsFinalizado(" Finalizado "));
+        Assert.False(ReglasCultivo.EsFinalizado(null));
+    }
 }
