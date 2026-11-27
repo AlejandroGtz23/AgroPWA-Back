@@ -12,15 +12,21 @@ namespace Agro.Infrastructure.Correo;
 /// <summary>Manda los correos por SMTP con STARTTLS (Gmail: smtp.gmail.com, puerto 587, contraseña de aplicación).</summary>
 public sealed class EnvioCorreoSmtp(ConfiguracionCorreo configuracion, ILogger<EnvioCorreoSmtp> logger) : IEnvioCorreo
 {
-    public async Task EnviarRecuperacionAsync(string correo, string nombre, string token, CancellationToken ct = default)
-    {
-        var enlace = PlantillasCorreo.EnlaceRecuperacion(configuracion.UrlRestablecer, token);
+    public Task EnviarRecuperacionAsync(string correo, string nombre, string token, CancellationToken ct = default) =>
+        EnviarAsync(correo, nombre, PlantillasCorreo.AsuntoRecuperacion,
+            PlantillasCorreo.Recuperacion(nombre, PlantillasCorreo.EnlaceConToken(configuracion.UrlRestablecer, token)), ct);
 
+    public Task EnviarBienvenidaAsync(string correo, string nombre, string token, CancellationToken ct = default) =>
+        EnviarAsync(correo, nombre, PlantillasCorreo.AsuntoBienvenida,
+            PlantillasCorreo.Bienvenida(nombre, PlantillasCorreo.EnlaceConToken(configuracion.UrlVerificarCorreo, token)), ct);
+
+    private async Task EnviarAsync(string correo, string nombre, string asunto, string html, CancellationToken ct)
+    {
         var mensaje = new MimeMessage();
         mensaje.From.Add(new MailboxAddress("Agro", configuracion.Remitente));
         mensaje.To.Add(new MailboxAddress(nombre, correo));
-        mensaje.Subject = PlantillasCorreo.AsuntoRecuperacion;
-        mensaje.Body = new BodyBuilder { HtmlBody = PlantillasCorreo.Recuperacion(nombre, enlace) }.ToMessageBody();
+        mensaje.Subject = asunto;
+        mensaje.Body = new BodyBuilder { HtmlBody = html }.ToMessageBody();
 
         try
         {
@@ -32,8 +38,8 @@ public sealed class EnvioCorreoSmtp(ConfiguracionCorreo configuracion, ILogger<E
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Responder distinto revelaría que el correo está registrado: solo se anota para revisarlo
-            logger.LogError(ex, "No se pudo enviar el correo de recuperación");
+            // Un correo que no sale no debe romper el registro ni revelar si una cuenta existe: solo se anota
+            logger.LogError(ex, "No se pudo enviar el correo «{Asunto}»", asunto);
         }
     }
 }

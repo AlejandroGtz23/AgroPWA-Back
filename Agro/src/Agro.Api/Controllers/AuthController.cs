@@ -1,15 +1,17 @@
 ﻿using Agro.Application.Auth.Commands.CerrarSesion;
 using Agro.Application.Auth.Commands.IniciarSesion;
+using Agro.Application.Auth.Commands.ReenviarVerificacion;
 using Agro.Application.Auth.Commands.RegistrarUsuario;
 using Agro.Application.Auth.Commands.RenovarSesion;
+using Agro.Application.Auth.Commands.RestablecerContrasena;
+using Agro.Application.Auth.Commands.SolicitarRecuperacion;
+using Agro.Application.Auth.Commands.VerificarCorreo;
 using Agro.Application.Auth.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.JsonWebTokens;
 using System.Security.Claims;
-using Agro.Application.Auth.Commands.RestablecerContrasena;
-using Agro.Application.Auth.Commands.SolicitarRecuperacion;
 
 namespace Agro.Api.Controllers;
 /// <summary>
@@ -26,7 +28,9 @@ public class AuthController(
     RenovarSesionHandler renovarSesion,
     CerrarSesionHandler cerrarSesion,
     SolicitarRecuperacionHandler solicitarRecuperacion,
-    RestablecerContrasenaHandler restablecerContrasena) : ControllerBase
+    RestablecerContrasenaHandler restablecerContrasena,
+    VerificarCorreoHandler verificarCorreo,
+    ReenviarVerificacionHandler reenviarVerificacion) : ControllerBase
 {
     [HttpPost("registro")]
     [ProducesResponseType<SesionDto>(StatusCodes.Status201Created)]
@@ -103,9 +107,31 @@ public class AuthController(
     [EnableRateLimiting("login")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+
     public async Task<IActionResult> Restablecer(RestablecerContrasenaCommand comando, CancellationToken ct)
     {
         await restablecerContrasena.EjecutarAsync(comando, ct);
+        return NoContent();
+    }
+
+    [HttpPost("verificar-correo")]
+    [EnableRateLimiting("login")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> VerificarCorreo(VerificarCorreoCommand comando, CancellationToken ct)
+    {
+        await verificarCorreo.EjecutarAsync(comando, ct);
+        return NoContent();
+    }
+
+    [Authorize]
+    [HttpPost("reenviar-verificacion")]
+    [EnableRateLimiting("login")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ReenviarVerificacion(CancellationToken ct)
+    {
+        await reenviarVerificacion.EjecutarAsync(int.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!), ct);
         return NoContent();
     }
 }

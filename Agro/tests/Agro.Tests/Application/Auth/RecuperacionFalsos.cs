@@ -48,4 +48,11 @@ internal sealed class EnvioCorreoFalso : IEnvioCorreo
         Enviados.Add((correo, nombre, token));
         return Task.CompletedTask;
     }
+    public List<(string Correo, string Nombre, string Token)> Bienvenidas { get; } = [];
+
+    public Task EnviarBienvenidaAsync(string correo, string nombre, string token, CancellationToken ct = default)
+    {
+        Bienvenidas.Add((correo, nombre, token));
+        return Task.CompletedTask;
+    }
 }

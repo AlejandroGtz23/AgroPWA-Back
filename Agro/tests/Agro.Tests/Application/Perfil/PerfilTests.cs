@@ -31,6 +31,7 @@ public class PerfilTests
 
         Assert.Equal("ana@agro.test", perfil.Correo);
         Assert.Equal("productor", perfil.Rol);
+        Assert.False(perfil.CorreoVerificado);
     }
 
     [Fact]

@@ -3,14 +3,14 @@ using Agro.Application.Common.Interfaces;
 using Agro.Application.Common.Models;
 using FluentValidation;
 
-
 namespace Agro.Application.Auth.Commands.RegistrarUsuario;
 
-/// <summary>Command: crea la cuenta de un productor (HU-09, criterios 1 y 2).</summary>
+/// <summary>Command: crea la cuenta de un productor (HU-09, criterios 1 y 2) y manda la bienvenida (HU-32).</summary>
 public sealed class RegistrarUsuarioHandler(
     IAuthProcedimientos procedimientos,
     IHashContrasena hashContrasena,
     CreadorSesion creadorSesion,
+    EnviadorVerificacionCorreo enviadorVerificacion,                            // ←
     IValidator<RegistrarUsuarioCommand> validador)
 {
     private const string RolPorDefecto = "productor";
@@ -31,8 +31,10 @@ public sealed class RegistrarUsuarioHandler(
 
         var idUsuario = await procedimientos.RegistrarUsuarioAsync(datos, ct); // 409 si el correo existe
 
+        // Bienvenida con el enlace para verificar el correo. Si Gmail falla, no rompe el registro
+        await enviadorVerificacion.EnviarAsync(idUsuario, ct);                 // ←
+
         var usuario = new UsuarioSesionDto(idUsuario, datos.Nombre, datos.Correo, RolPorDefecto);
         return await creadorSesion.CrearAsync(usuario, recordarme: false, ip, agenteUsuario, ct);
     }
-
 }

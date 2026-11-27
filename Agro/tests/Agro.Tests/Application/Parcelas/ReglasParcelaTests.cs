@@ -96,4 +96,12 @@ public class ReglasParcelaTests
         Assert.False(resultado.IsValid);
         Assert.Contains(resultado.Errors, e => e.PropertyName == campo);
     }
+
+    [Fact]
+    public void La_superficie_no_puede_pasar_del_maximo_de_la_tabla()
+    {
+        var comando = new RegistrarParcelaCommand(null, "Parcela", ReglasParcela.SuperficieMaxima + 0.01m, null);
+
+        Assert.False(new RegistrarParcelaValidator().Validate(comando).IsValid);
+    }
 }

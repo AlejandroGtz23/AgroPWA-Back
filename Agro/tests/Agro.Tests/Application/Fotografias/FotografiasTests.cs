@@ -138,4 +138,22 @@ public class FotografiasTests
         Assert.Equal(EliminarFotografiaHandler.NoEncontrada, error.Message);
         Assert.Single(_procedimientos.Fotos);
     }
+
+    [Fact]
+    public void Los_enlaces_se_generan_solo_si_hay_ruta()
+    {
+        var enlaces = new EnlacesFotografias(_almacen);
+
+        Assert.Null(enlaces.Enlace(null));
+        Assert.Equal("https://almacen.test/u/a.jpg?sig=prueba", enlaces.Enlace("u/a.jpg"));
+    }
+
+    [Fact]
+    public async Task Un_archivo_de_menos_de_3_bytes_no_es_imagen()
+    {
+        await Assert.ThrowsAsync<ValidationException>(
+            () => Subir().EjecutarAsync(Cultivo, Usuario, Comando([0xFF, 0xD8])));
+
+        Assert.Empty(_almacen.Subidas);
+    }
 }
