@@ -15,7 +15,7 @@ public sealed class RegistrarAvanceValidator : AbstractValidator<RegistrarAvance
             .Cascade(CascadeMode.Stop)
             .NotNull().WithMessage("La fecha es obligatoria.")
             // 5 minutos de tolerancia por si el reloj del teléfono va adelantado
-            .Must(f => f <= reloj.GetUtcNow().AddMinutes(5)).WithMessage("La fecha no puede estar en el futuro.");
+            .Must(f => f!.Value <= reloj.GetUtcNow().AddMinutes(5)).WithMessage("La fecha no puede estar en el futuro.");
 
         RuleFor(x => x.Descripcion)
             .Cascade(CascadeMode.Stop)

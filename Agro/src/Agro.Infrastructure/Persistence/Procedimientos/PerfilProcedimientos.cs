@@ -20,7 +20,8 @@ public sealed class PerfilProcedimientos(AgroDbContext db) : ProcedimientosBase(
                 lector.IsDBNull(lector.GetOrdinal("telefono")) ? null : lector.GetString(lector.GetOrdinal("telefono")),
                 lector.IsDBNull(lector.GetOrdinal("comunidad_municipio")) ? null : lector.GetString(lector.GetOrdinal("comunidad_municipio")),
                 lector.GetString(lector.GetOrdinal("rol")),
-                lector.GetFieldValue<DateTimeOffset>(lector.GetOrdinal("fecha_registro"))),
+                lector.GetFieldValue<DateTimeOffset>(lector.GetOrdinal("fecha_registro")),
+                lector.GetBoolean(lector.GetOrdinal("correo_verificado"))),
             ct,
             Parametro("id_usuario", NpgsqlDbType.Integer, idUsuario));
 
