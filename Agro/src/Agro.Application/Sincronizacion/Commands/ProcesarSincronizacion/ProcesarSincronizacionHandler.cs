@@ -71,8 +71,7 @@ public sealed class ProcesarSincronizacionHandler(
 
     private static string MensajeDe(Exception ex) => ex switch
     {
-        ValidationException { Errors: var errores } when errores.Any() =>
-            string.Join(" ", errores.Select(e => e.ErrorMessage).Distinct()),
+        ValidationException v => string.Join(" ", v.Errors.Select(e => e.ErrorMessage).Distinct()),
         JsonException => EjecutorOperaciones.DatosInvalidos,
         _ => ex.Message
     };

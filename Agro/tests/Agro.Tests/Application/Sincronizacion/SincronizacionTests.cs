@@ -1,5 +1,6 @@
 ﻿using Agro.Application.Avances.Commands.RegistrarAvance;
 using Agro.Application.Common.Exceptions;
+using Agro.Application.Common.Models;
 using Agro.Application.Cultivos.Commands.EditarCultivo;
 using Agro.Application.Cultivos.Commands.EliminarCultivo;
 using Agro.Application.Cultivos.Commands.RegistrarCultivo;
@@ -46,20 +47,29 @@ public class SincronizacionTests
         _avances.AgregarCultivo(1, Usuario);
     }
 
-    private ProcesarSincronizacionHandler Handler()
+    private readonly FotografiasProcedimientosFalsos _fotos = new();
+
+    private EjecutorOperaciones Ejecutor()
     {
         var almacen = new AlmacenFotosFalso();
         var enlaces = new EnlacesFotografias(almacen);
-        var ejecutor = new EjecutorOperaciones(_sincronizacion,
+        return new EjecutorOperaciones(_sincronizacion,
             new RegistrarParcelaHandler(_parcelas, new RegistrarParcelaValidator()),
             new EditarParcelaHandler(_parcelas, new EditarParcelaValidator()),
             new RegistrarCultivoHandler(_cultivos, new RegistrarCultivoValidator(Reloj), enlaces),
             new EditarCultivoHandler(_cultivos, new EditarCultivoValidator(Reloj), enlaces),
             new EliminarCultivoHandler(_cultivos, almacen),
             new RegistrarAvanceHandler(_avances, new RegistrarAvanceValidator(Reloj)),
-            new EliminarFotografiaHandler(new FotografiasProcedimientosFalsos(), almacen));
-        return new ProcesarSincronizacionHandler(_sincronizacion, ejecutor, new ProcesarSincronizacionValidator());
+            new EliminarFotografiaHandler(_fotos, almacen));
     }
+
+    private ProcesarSincronizacionHandler Handler() =>
+        new(_sincronizacion, Ejecutor(), new ProcesarSincronizacionValidator());
+
+    /// <summary>Operación con datos escritos como JSON (para probar datos mal formados).</summary>
+    private static OperacionSincronizacion OpJson(string entidad, Guid idLocal, string operacion, string json, int minuto) =>
+        new(entidad, idLocal, operacion, JsonDocument.Parse(json).RootElement.Clone(),
+            new DateTimeOffset(2026, 11, 11, 10, minuto, 0, TimeSpan.Zero));
 
     private static OperacionSincronizacion Op(string entidad, Guid idLocal, string operacion, object datos, int minuto) =>
         new(entidad, idLocal, operacion, JsonSerializer.SerializeToElement(datos, Json),
@@ -255,5 +265,93 @@ public class SincronizacionTests
         var error = Assert.Single(new ActualizarPreferenciasValidator()
             .Validate(new ActualizarPreferenciasCommand(true, false, -1)).Errors);
         Assert.Equal("El espacio usado no puede ser negativo.", error.ErrorMessage);
+    }
+
+    // ----- Más operaciones -----
+
+    [Fact]
+    public async Task Edita_una_parcela_por_su_id()
+    {
+        var resultado = await Handler().EjecutarAsync(Usuario, Lote(CrearParcela(),
+            Op("parcela", Parcela, "editar", new { id = 1, nombre = "Parcela renombrada", superficieHa = 3m }, 1)));
+
+        Assert.Equal(2, resultado.Sincronizados);
+    }
+
+    [Fact]
+    public async Task Elimina_un_cultivo_creado_en_el_mismo_lote()
+    {
+        var resultado = await Handler().EjecutarAsync(Usuario,
+            Lote(CrearParcela(), CrearCultivo(), Op("cultivo", Cultivo, "eliminar", new { }, 2)));
+
+        Assert.Equal(3, resultado.Sincronizados);
+        Assert.Null(await _cultivos.ObtenerDetalleAsync(1, Usuario));
+    }
+
+    [Fact]
+    public async Task Elimina_una_fotografia_por_su_id()
+    {
+        await _fotos.RegistrarAsync(Usuario, 1, new NuevaFotografia(null, null, "u/c/a.jpg", "a.jpg", 10, false, null, null));
+
+        var resultado = await Handler().EjecutarAsync(Usuario,
+            Lote(Op("fotografia", Guid.NewGuid(), "eliminar", new { id = 1 }, 0)));
+
+        Assert.Equal(1, resultado.Sincronizados);
+        Assert.Empty(_fotos.Fotos);
+    }
+
+    [Fact]
+    public async Task Acepta_el_id_numerico_de_la_parcela()
+    {
+        var resultado = await Handler().EjecutarAsync(Usuario, Lote(CrearParcela(),
+            Op("cultivo", Cultivo, "crear", new { nombre = "Frijol", idTipoCultivo = 2, fechaSiembra = "2026-11-01", idParcela = 1 }, 1)));
+
+        Assert.Equal(2, resultado.Sincronizados);
+    }
+
+    [Theory]
+    [InlineData("""{"idTipoActividad":3,"fechaActividad":"2026-11-10T15:00:00Z","descripcion":"x"}""")]
+    [InlineData("""{"idLocalCultivo":"no-es-guid","idTipoActividad":3,"fechaActividad":"2026-11-10T15:00:00Z","descripcion":"x"}""")]
+    [InlineData("\"texto\"")]
+    public async Task Un_avance_sin_un_cultivo_valido_da_error(string datos)
+    {
+        var resultado = await Handler().EjecutarAsync(Usuario, Lote(OpJson("avance", Avance, "crear", datos, 0)));
+
+        Assert.Equal("El cultivo es obligatorio.", Assert.Single(resultado.Resultados).MensajeError);
+    }
+
+    [Theory]
+    [InlineData("""{"id":"abc"}""")]
+    [InlineData("""{"id":5000000000}""")]
+    [InlineData("\"texto\"")]
+    public async Task Si_el_id_no_es_valido_se_busca_por_idLocal(string datos)
+    {
+        var resultado = await Handler().EjecutarAsync(Usuario, Lote(OpJson("cultivo", Guid.NewGuid(), "eliminar", datos, 0)));
+
+        Assert.Equal(EjecutorOperaciones.RegistroNoEncontrado, Assert.Single(resultado.Resultados).MensajeError);
+    }
+
+    [Fact]
+    public async Task Datos_con_tipos_incorrectos_dan_error()
+    {
+        var resultado = await Handler().EjecutarAsync(Usuario,
+            Lote(OpJson("parcela", Parcela, "crear", """{"nombre":"P","superficieHa":"mucho"}""", 0)));
+
+        Assert.Equal(EjecutorOperaciones.DatosInvalidos, Assert.Single(resultado.Resultados).MensajeError);
+    }
+
+    [Fact]
+    public async Task El_ejecutor_rechaza_una_operacion_no_permitida()
+    {
+        await Assert.ThrowsAsync<ValidationException>(() => Ejecutor().EjecutarAsync(
+            Op("parcela", Parcela, "eliminar", new { }, 0), Usuario, new Dictionary<(string, Guid), int>()));
+    }
+
+    [Fact]
+    public async Task Devuelve_el_estado_del_dispositivo_propio()
+    {
+        var estado = await new ObtenerEstadoHandler(_sincronizacion).EjecutarAsync(Dispositivo, Usuario);
+
+        Assert.Equal(Dispositivo, estado.IdDispositivo);
     }
 }

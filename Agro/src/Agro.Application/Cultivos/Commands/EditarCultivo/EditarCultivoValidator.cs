@@ -28,8 +28,8 @@ public sealed class EditarCultivoValidator : AbstractValidator<EditarCultivoComm
             RuleFor(x => x.FechaCosecha)
                 .Cascade(CascadeMode.Stop)
                 .NotNull().WithMessage("Captura la fecha de cosecha.")
-                .Must(f => f <= FechaMexico.Hoy(reloj)).WithMessage("La fecha de cosecha no puede ser posterior a hoy.")
-                .Must((comando, f) => comando.FechaSiembra is null || f >= comando.FechaSiembra)
+                .Must(f => f!.Value <= FechaMexico.Hoy(reloj)).WithMessage("La fecha de cosecha no puede ser posterior a hoy.")
+                .Must((comando, f) => comando.FechaSiembra is not { } siembra || f!.Value >= siembra)
                 .WithMessage("La fecha de cosecha no puede ser anterior a la de siembra.");
         });
     }
