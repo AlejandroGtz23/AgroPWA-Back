@@ -31,6 +31,8 @@ using Agro.Application.Sincronizacion.Commands.RegistrarDispositivo;
 using Agro.Application.Sincronizacion.Common;
 using Agro.Application.Sincronizacion.Queries.ObtenerEstado;
 using FluentValidation;
+using Agro.Application.Auth.Commands.ReenviarVerificacion;
+using Agro.Application.Auth.Commands.VerificarCorreo;
 using Microsoft.Extensions.DependencyInjection;
 
 
@@ -102,6 +104,10 @@ public static class DependencyInjection
         services.AddScoped<CambiarContrasenaHandler>();
         services.AddScoped<SolicitarRecuperacionHandler>();
         services.AddScoped<RestablecerContrasenaHandler>();
+
+        services.AddScoped<EnviadorVerificacionCorreo>();
+        services.AddScoped<VerificarCorreoHandler>();
+        services.AddScoped<ReenviarVerificacionHandler>();
 
         return services;
     }

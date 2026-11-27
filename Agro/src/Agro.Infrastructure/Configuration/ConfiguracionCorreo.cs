@@ -8,7 +8,7 @@ namespace Agro.Infrastructure.Configuration;
 /// SMTP_* del .env. Si falta SMTP_HOST, los correos se escriben en la consola (desarrollo local).
 /// </summary>
 public sealed record ConfiguracionCorreo(string? Host, int Puerto, string? Usuario, string? Contrasena,
-    string Remitente, string UrlRestablecer)
+    string Remitente, string UrlRestablecer, string UrlVerificarCorreo)
 {
     public bool UsaSmtp => !string.IsNullOrWhiteSpace(Host);
 
@@ -24,6 +24,10 @@ public sealed record ConfiguracionCorreo(string? Host, int Puerto, string? Usuar
             // Con SMTP la contraseña es obligatoria: si falta, la API avisa y no arranca
             string.IsNullOrWhiteSpace(host) ? null : VariablesEntorno.Obtener("SMTP_CONTRASENA"),
             Environment.GetEnvironmentVariable("SMTP_REMITENTE") is { Length: > 0 } remitente ? remitente : usuario ?? "agro@localhost",
-            Environment.GetEnvironmentVariable("URL_RESTABLECER") is { Length: > 0 } url ? url : "http://localhost:5173/restablecer");
+            Opcional("URL_RESTABLECER", "http://localhost:5173/restablecer"),
+            Opcional("URL_VERIFICAR_CORREO", "http://localhost:5173/verificar-correo"));
     }
+
+    private static string Opcional(string nombre, string porDefecto) =>
+        Environment.GetEnvironmentVariable(nombre) is { Length: > 0 } valor ? valor : porDefecto;
 }

@@ -9,4 +9,7 @@ public interface IEnvioCorreo
 {
     /// <summary>Manda el enlace para restablecer la contraseña; el token va dentro del enlace.</summary>
     Task EnviarRecuperacionAsync(string correo, string nombre, string token, CancellationToken ct = default);
+
+    /// <summary>Bienvenida al crear la cuenta, con el enlace para verificar el correo.</summary>
+    Task EnviarBienvenidaAsync(string correo, string nombre, string token, CancellationToken ct = default);
 }

@@ -10,7 +10,7 @@ internal sealed class PerfilProcedimientosFalsos : IPerfilProcedimientos
     public const int Usuario = 1;
 
     public PerfilDto Perfil { get; private set; } =
-        new("Ana", "López", null, "ana@agro.test", null, null, "productor", DateTimeOffset.UnixEpoch);
+        new("Ana", "López", null, "ana@agro.test", null, null, "productor", DateTimeOffset.UnixEpoch, false);
     public string Hash { get; private set; } = "hash:Actual123";
     public string? JtiConservado { get; private set; }
 

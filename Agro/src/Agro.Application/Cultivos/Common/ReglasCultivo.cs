@@ -24,7 +24,7 @@ public static class ReglasCultivo
     public static IRuleBuilderOptions<T, DateOnly?> FechaSiembra<T>(this IRuleBuilderInitial<T, DateOnly?> regla, TimeProvider reloj) =>
             regla.Cascade(CascadeMode.Stop)
             .NotNull().WithMessage("La fecha de siembra es obligatoria.")
-            .Must(f => f <= FechaMexico.Hoy(reloj)).WithMessage("La fecha de siembra no puede ser posterior a hoy.")
+            .Must(f => f!.Value <= FechaMexico.Hoy(reloj)).WithMessage("La fecha de siembra no puede ser posterior a hoy.")
             .GreaterThanOrEqualTo(new DateOnly(2000, 1, 1)).WithMessage("La fecha de siembra no es válida.");
 
     public static IRuleBuilderOptions<T, string?> Variedad<T>(this IRuleBuilderInitial<T, string?> regla) =>

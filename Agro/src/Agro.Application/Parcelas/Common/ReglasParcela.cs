@@ -8,7 +8,7 @@ namespace Agro.Application.Parcelas.Common;
 
 public static class ReglasParcela
 {
-    public const decimal SuperficieMaxima = 999_999.99m;   // NUMERIC(8,2)
+    public static readonly decimal SuperficieMaxima = 999_999.99m;   // NUMERIC(8,2)
 
     public static IRuleBuilderOptions<T, string> NombreParcela<T>(this IRuleBuilderInitial<T, string> regla) =>
         regla.Cascade(CascadeMode.Stop)
